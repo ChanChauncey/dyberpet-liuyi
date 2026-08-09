@@ -40,14 +40,14 @@ DEFAULT_THEME_COL = "#009faa"
 HELP_URL = "https://github.com/ChaozhongLiu/DyberPet/issues"
 PROJECT_URL = "https://github.com/ChaozhongLiu/DyberPet"
 DEVDOC_URL = "https://github.com/ChaozhongLiu/DyberPet/blob/main/docs/art_dev.md"
-VERSION = "v0.6.7"
+VERSION = "v1.0.0"
 AUTHOR = "https://github.com/ChaozhongLiu"
 CHARCOLLECT_LINK = "https://github.com/ChaozhongLiu/DyberPet/blob/main/docs/collection.md"
 ITEMCOLLECT_LINK = "https://github.com/ChaozhongLiu/DyberPet/blob/main/docs/collection.md"
 PETCOLLECT_LINK = "https://github.com/ChaozhongLiu/DyberPet/blob/main/docs/collection.md"
 
-RELEASE_API = "https://api.github.com/repos/ChaozhongLiu/DyberPet/releases/latest"
-RELEASE_URL = "https://github.com/ChaozhongLiu/DyberPet/releases/latest"
+RELEASE_API = "https://api.github.com/repos/ChanChauncey/dyberpet-liuyi/releases/latest"
+RELEASE_URL = "https://github.com/ChanChauncey/dyberpet-liuyi/releases/latest"
 
 # UI 尺寸常量（需与 DyberPet.py 保持一致）
 STATBAR_H = 20  # 状态栏/信息条高度，widget 总高度 = 2*STATBAR_H + 图片高度

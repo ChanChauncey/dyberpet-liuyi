@@ -6,7 +6,7 @@ from sys import platform
 
 from qfluentwidgets import (SettingCardGroup, SwitchSettingCard, HyperlinkCard,InfoBar,
                             ComboBoxSettingCard, ScrollArea, ExpandLayout, InfoBarPosition,
-                            setThemeColor)
+                            PushSettingCard, setThemeColor)
 
 from qfluentwidgets import FluentIcon as FIF
 from PySide6.QtCore import Qt, Signal, QUrl, QStandardPaths, QLocale
@@ -224,6 +224,27 @@ class SettingInterface(ScrollArea):
             parent=self.ShortcutGroup
         )
 
+        # About / 更新 =================================================================================
+        self.AboutGroup = SettingCardGroup(self.tr('关于 / About'), self.scrollWidget)
+
+        self.CheckUpdateCard = PushSettingCard(
+            self.tr('检查更新'),
+            FIF.SYNC,
+            self.tr('检查更新'),
+            self.tr('检查是否有新版本可下载'),
+            parent=self.AboutGroup
+        )
+        self.CheckUpdateCard.clicked.connect(self._onCheckUpdateClicked)
+
+        self.ReleaseCard = HyperlinkCard(
+            settings.RELEASE_URL,
+            self.tr('打开 Releases'),
+            FIF.LINK,
+            self.tr('最新版本下载'),
+            self.tr('访问 GitHub Releases 获取最新安装包'),
+            parent=self.AboutGroup
+        )
+
         self.__initWidget()
 
     def __initWidget(self):
@@ -263,6 +284,9 @@ class SettingInterface(ScrollArea):
 
         self.ShortcutGroup.addSettingCard(self.ShortcutCard)
 
+        self.AboutGroup.addSettingCard(self.CheckUpdateCard)
+        self.AboutGroup.addSettingCard(self.ReleaseCard)
+
         # add setting card group to layout
         self.expandLayout.setSpacing(28)
         self.expandLayout.setContentsMargins(60, 10, 60, 0)
@@ -272,6 +296,7 @@ class SettingInterface(ScrollArea):
         self.expandLayout.addWidget(self.VolumnGroup)
         self.expandLayout.addWidget(self.PersonalGroup)
         self.expandLayout.addWidget(self.ShortcutGroup)
+        self.expandLayout.addWidget(self.AboutGroup)
 
     def __setQss(self):
         """ set style sheet """
@@ -365,7 +390,26 @@ class SettingInterface(ScrollArea):
                 return False, local_version + "  " + self.tr("Already the latest")
         else:
             return False, self.tr("Failed to check updates. Please check the website.")
-        
+
+    def _onCheckUpdateClicked(self):
+        has_update, info = self._checkUpdate()
+        if has_update:
+            InfoBar.success(
+                title=self.tr('发现新版本'),
+                content=info,
+                duration=5000,
+                position=InfoBarPosition.BOTTOM,
+                parent=self.window()
+            )
+        else:
+            InfoBar.info(
+                title=self.tr('检查更新'),
+                content=info,
+                duration=4000,
+                position=InfoBarPosition.BOTTOM,
+                parent=self.window()
+            )
+
     def _AllowToasterChanged(self, isChecked):
         if isChecked:
             settings.toaster_on = True

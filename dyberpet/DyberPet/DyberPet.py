@@ -597,6 +597,34 @@ class PetWidget(QWidget):
 
         self._setup_compensate()
 
+        # 启动后自动检测新版本（延迟4s，避免影响启动；网络请求在后台线程）
+        QTimer.singleShot(4000, self._autoCheckUpdate)
+
+    def _autoCheckUpdate(self):
+        """启动后自动检测 GitHub Release 是否有新版本，结果均弹窗反馈（不阻塞启动）"""
+        def _worker():
+            try:
+                from DyberPet.DyberSettings.BasicSettingUI import get_latest_version, compare_versions
+                success, github_version = get_latest_version()
+                if success:
+                    if compare_versions(settings.VERSION, github_version):
+                        QTimer.singleShot(0, lambda: InfoBar.success(
+                            title='发现新版本',
+                            content='最新版本 ' + github_version + ' 已发布，到「设置 → 关于」下载',
+                            duration=6000,
+                            position=InfoBarPosition.TOP,
+                            parent=self))
+                    else:
+                        QTimer.singleShot(0, lambda: InfoBar.info(
+                            title='已是最新版本',
+                            content='当前 ' + settings.VERSION + ' 无需更新',
+                            duration=4000,
+                            position=InfoBarPosition.TOP,
+                            parent=self))
+            except Exception:
+                pass
+        threading.Thread(target=_worker, daemon=True).start()
+
     def _setup_compensate(self):
         self._stop_compensate()
         self.compensate_timer = QTimer(singleShot=True, timeout=self._compensate_rewards)
