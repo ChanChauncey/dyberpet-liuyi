@@ -1985,7 +1985,7 @@ class PetWidget(QWidget):
         if self.tray is None:
             self.tray = SystemTray(self.StatMenu, self) #QSystemTrayIcon(self)
             self.tray.setIcon(QIcon(os.path.join(basedir, 'res/icons/icon.png')))
-            self.tray.setToolTip('我叫六一')
+            self.tray.setToolTip('六一桌宠')
             self.tray.show()
         else:
             self.tray.setMenu(self.StatMenu)

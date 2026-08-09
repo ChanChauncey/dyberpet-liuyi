@@ -47,7 +47,7 @@ class DyberPetApp(QApplication):
     def __init__(self, *args, **kwargs):
         super(DyberPetApp, self).__init__(*args, **kwargs)
 
-        self.setApplicationName('我叫六一')
+        self.setApplicationName('六一桌宠')
         self.setQuitOnLastWindowClosed(False)
         screens = self.screens()
         primary_screen = self.primaryScreen()

@@ -2,7 +2,7 @@
 
 > **面向 AI 代理的工作者：** 必需子技能：使用 superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans 逐任务实现此计划。步骤使用复选框（`- [ ]`）语法来跟踪进度。
 
-**目标：** 制作8张小红书图文教程图片，展示"我叫六一"桌面宠物的制作流程
+**目标：** 制作8张小红书图文教程图片，展示"六一桌宠"桌面宠物的制作流程
 
 **架构：** 使用HTML+CSS生成科技风格的教程图片，每张图片是一个独立的HTML页面，可以通过浏览器截图或导出为图片
 
@@ -371,7 +371,7 @@ git commit -m "style: 添加教程全局样式"
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我叫六一 - 封面</title>
+    <title>六一桌宠 - 封面</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -379,7 +379,7 @@ git commit -m "style: 添加教程全局样式"
         <div class="decoration decoration-1"></div>
         <div class="decoration decoration-2"></div>
         
-        <h1 class="title">我叫六一</h1>
+        <h1 class="title">六一桌宠</h1>
         <p class="subtitle">把你的猫变成桌面上的数字生命</p>
         
         <div style="margin: 40px 0;">
@@ -1106,7 +1106,7 @@ git commit -m "feat: 添加配置调整页面"
             <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: url('data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><rect fill=\"%23333\" width=\"100\" height=\"100\"/><rect fill=\"%23444\" x=\"10\" y=\"10\" width=\"20\" height=\"20\"/><rect fill=\"%23444\" x=\"40\" y=\"10\" width=\"20\" height=\"20\"/><rect fill=\"%23444\" x=\"70\" y=\"10\" width=\"20\" height=\"20\"/><rect fill=\"%23444\" x=\"10\" y=\"40\" width=\"20\" height=\"20\"/><rect fill=\"%23444\" x=\"40\" y=\"40\" width=\"20\" height=\"20\"/><rect fill=\"%23444\" x=\"70\" y=\"40\" width=\"20\" height=\"20\"/><rect fill=\"%23444\" x=\"10\" y=\"70\" width=\"20\" height=\"20\"/><rect fill=\"%23444\" x=\"40\" y=\"70\" width=\"20\" height=\"20\"/><rect fill=\"%23444\" x=\"70\" y=\"70\" width=\"20\" height=\"20\"/></svg>'); background-size: 50px 50px; opacity: 0.3;"></div>
             <span style="font-size: 120px; z-index: 1;">🐱</span>
             <div style="position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.7); padding: 10px 15px; border-radius: 8px;">
-                <span style="color: #533483; font-size: 14px;">我叫六一</span>
+                <span style="color: #533483; font-size: 14px;">六一桌宠</span>
             </div>
         </div>
         
@@ -1198,7 +1198,7 @@ git commit -m "feat: 添加成品展示页面"
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我叫六一 - 小红书图文教程</title>
+    <title>六一桌宠 - 小红书图文教程</title>
     <link rel="stylesheet" href="css/style.css">
     <style>
         body {
@@ -1260,7 +1260,7 @@ git commit -m "feat: 添加成品展示页面"
 </head>
 <body>
     <div class="header">
-        <h1>我叫六一</h1>
+        <h1>六一桌宠</h1>
         <p>小红书图文教程（共8张）</p>
     </div>
     

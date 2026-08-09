@@ -1,4 +1,4 @@
-# 🐱 我叫六一 - 数字猫桌面宠物
+# 🐱 六一桌宠 - 数字猫桌面宠物
 
 将家里的猫变成"数字生命"——一只运行在 Windows 桌面上的模拟养成桌面宠物。
 
@@ -51,7 +51,7 @@
 
 ### 方式一：下载安装包（推荐）
 
-前往 [Releases](https://github.com/zyt314415128/dyberpet-dahui/releases) 页面下载最新版本的 `我叫六一Setup.exe`，双击运行即可。
+前往 [Releases](https://github.com/ChanChauncey/dyberpet-liuyi/releases) 页面下载最新版本的 `六一桌宠_Setup.exe`，双击运行即可。
 
 ### 方式二：源码运行
 
@@ -76,7 +76,7 @@
 2. 打包：
    ```bash
    cd dyberpet
-   pyinstaller 我叫六一.spec
+   pyinstaller liuyi.spec
    ```
 
 3. 安装程序生成在 `安装包/` 目录

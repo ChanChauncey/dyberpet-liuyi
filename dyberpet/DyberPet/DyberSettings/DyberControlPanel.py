@@ -107,7 +107,7 @@ class ControlMainWindow(FluentWindow):
 
         # ---- 项目介绍 ----
         p1 = QLabel(
-            '[我叫六一] 是我基于 GitHub 开源项目 [DyberPet]'
+            '[六一桌宠] 是我基于 GitHub 开源项目 [DyberPet]'
             '(https://github.com/ChaozhongLiu/DyberPet) 进行的二次开发。'
             '特别感谢 [DyberPet] 提供的框架和设计灵感，让我家的六一'
             '实现了"数字永生"，让它可以在桌面上永远陪伴我。'
