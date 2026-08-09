@@ -51,7 +51,7 @@
 
 ### 方式一：下载安装包（推荐）
 
-前往 [Releases](https://github.com/ChanChauncey/dyberpet-liuyi/releases) 页面下载最新版本的 `六一桌宠_Setup.exe`，双击运行即可。
+前往 [Releases](https://github.com/ChanChauncey/dyberpet-liuyi/releases) 页面下载最新版本的 **六一桌宠** 安装包（`liuyi_Setup.exe`），双击运行即可。
 
 ### 方式二：源码运行
 
