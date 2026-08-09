@@ -395,8 +395,20 @@ class SettingInterface(ScrollArea):
 
     def _onCheckUpdateClicked(self):
         # 网络请求放到后台线程，避免界面卡顿（GitHub 国内访问可能较慢）
+        InfoBar.info(
+            title=self.tr('检查更新'),
+            content=self.tr('正在检查新版本...'),
+            duration=2000,
+            position=InfoBarPosition.BOTTOM,
+            parent=self.window()
+        )
+
         def _worker():
-            has_update, info = self._checkUpdate()
+            try:
+                has_update, info = self._checkUpdate()
+            except Exception as e:
+                print('[CheckUpdate] worker exception:', e)
+                has_update, info = False, self.tr('检查更新失败：网络异常或无法访问 GitHub，请稍后重试。')
             QTimer.singleShot(0, lambda: self._showUpdateResult(has_update, info))
         threading.Thread(target=_worker, daemon=True).start()
 

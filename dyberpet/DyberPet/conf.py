@@ -16,7 +16,9 @@ from .utils import get_file_time, find_dir_with_subdir, convert_fv_versions
 if platform == 'win32':
     if getattr(sys, 'frozen', False):
         basedir = os.path.dirname(sys.executable)
-        configdir = basedir
+        # 用户可写数据目录：%LOCALAPPDATA%\六一桌宠
+        # 避免写入 Program Files 导致权限不足
+        configdir = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), '六一桌宠')
     else:
         basedir = ''
         configdir = ''
@@ -31,7 +33,7 @@ else:
 if platform == 'linux':
     configdir = os.path.dirname(os.environ['HOME']+'/.config/DyberPet/DyberPet')
 elif platform == 'win32':
-    # configdir already set above (frozen: exe dir, source: empty)
+    # configdir already set above
     pass
 else:
     configdir = basedir

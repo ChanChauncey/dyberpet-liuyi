@@ -24,6 +24,14 @@ class ControlMainWindow(FluentWindow):
     def __init__(self, minWidth=800, minHeight=800):
         super().__init__()
 
+        # 根据屏幕可用区域动态限制窗口大小，避免笔记本小屏显示不全
+        desktop = QApplication.primaryScreen().availableGeometry()
+        screen_w, screen_h = desktop.width(), desktop.height()
+        self._maxW = int(screen_w * 0.85)
+        self._maxH = int(screen_h * 0.85)
+        minWidth = min(minWidth, self._maxW)
+        minHeight = min(minHeight, self._maxH)
+
         # create sub interface
         self.settingInterface = SettingInterface(self)
         self.gamesaveInterface = SaveInterface(sizeHintDyber=(minWidth, minHeight), parent=self)
@@ -32,6 +40,7 @@ class ControlMainWindow(FluentWindow):
 
         self.initNavigation()
         self.setMinimumSize(minWidth, minHeight)
+        self.setMaximumSize(self._maxW, self._maxH)
         self.initWindow()
 
     def initNavigation(self):

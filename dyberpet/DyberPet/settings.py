@@ -294,15 +294,21 @@ def init_settings():
     global file_path, settingGood
     file_path = os.path.join(configdir, 'data/settings.json')
 
-    # 迁移旧设置：如果用户数据目录在 %LOCALAPPDATA%，且安装目录下有旧的 settings.json，则自动复制一次
+    # 迁移旧设置：如果用户数据目录在 %LOCALAPPDATA%，且安装目录下有旧的 data/，则自动复制一次
     if platform == 'win32' and getattr(sys, 'frozen', False) and BASEDIR != configdir:
-        old_file_path = os.path.join(BASEDIR, 'data/settings.json')
+        old_data_dir = os.path.join(BASEDIR, 'data')
+        new_data_dir = os.path.dirname(file_path)
+        if os.path.isdir(old_data_dir) and not os.path.isdir(new_data_dir):
+            try:
+                shutil.copytree(old_data_dir, new_data_dir)
+            except Exception:
+                pass  # 整目录迁移失败也不影响；后续会按单文件兜底
         if os.path.isfile(old_file_path) and not os.path.isfile(file_path):
             try:
                 os.makedirs(os.path.dirname(file_path), exist_ok=True)
                 shutil.copy2(old_file_path, file_path)
             except Exception:
-                pass  # 迁移失败也不影响后续初始化
+                pass  # 单文件迁移失败也不影响后续初始化
 
     global gravity, fixdragspeedx, fixdragspeedy, tunable_scale, scale_dict, volume, \
            language_code, on_top_hint, default_pet, defaultAct, themeColor, minipet_scale, \
