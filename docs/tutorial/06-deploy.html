@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>精灵图部署</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="tutorial-card">
+        <div class="decoration decoration-1"></div>
+        <div class="decoration decoration-2"></div>
+
+        <h1 class="title">精灵图部署</h1>
+        <p class="subtitle">将处理好的图片部署到项目</p>
+
+        <div class="flow-chart">
+            <div class="flow-step">
+                <div style="font-size: 32px; margin-bottom: 10px;">🖼️</div>
+                <span>PNG序列</span>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+                <div style="font-size: 32px; margin-bottom: 10px;">⚙️</div>
+                <span>deploy_sprites.py</span>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+                <div style="font-size: 32px; margin-bottom: 10px;">📁</div>
+                <span>精灵图目录</span>
+            </div>
+        </div>
+
+        <div class="directory-tree">
+            <p style="color: #7ee787;">dyberpet/res/role/六一/</p>
+            <p style="margin-left: 20px;">├── action/</p>
+            <p style="margin-left: 40px;">├── stand_0.png</p>
+            <p style="margin-left: 40px;">├── stand_1.png</p>
+            <p style="margin-left: 40px;">├── walk_0.png</p>
+            <p style="margin-left: 40px;">├── walk_1.png</p>
+            <p style="margin-left: 40px;">└── ...</p>
+            <p style="margin-left: 20px;">├── pet_conf.json</p>
+            <p style="margin-left: 20px;">└── act_conf.json</p>
+        </div>
+
+        <div class="config-comparison">
+            <div class="config-panel">
+                <h3>自动化部署</h3>
+                <div class="feature-list">
+                    <div class="feature-item">
+                        <div class="feature-icon">✓</div>
+                        <span class="feature-text">自动创建目录结构</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">✓</div>
+                        <span class="feature-text">自动复制文件</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">✓</div>
+                        <span class="feature-text">自动生成配置文件</span>
+                    </div>
+                </div>
+            </div>
+            <div class="config-panel">
+                <h3>配置文件生成</h3>
+                <div class="code-block" style="font-size: 12px;">
+                    <p>{</p>
+                    <p style="margin-left: 20px;">"stand": {</p>
+                    <p style="margin-left: 40px;">"frame_start": 0,</p>
+                    <p style="margin-left: 40px;">"frame_end": 23</p>
+                    <p style="margin-left: 20px;">}</p>
+                    <p>}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="code-block">
+            <p style="color: #7ee787;"># 部署命令</p>
+            <p>python tools/deploy_sprites.py</p>
+            <br>
+            <p style="color: #7ee787;"># 特点</p>
+            <p>不覆盖已有配置，只补充新动作</p>
+        </div>
+
+        <div class="page-number">6/8</div>
+    </div>
+</body>
+</html>

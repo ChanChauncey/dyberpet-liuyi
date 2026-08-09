@@ -1,0 +1,127 @@
+{
+  "width": 640,
+  "height": 360,
+  "scale": 1.0,
+  "interact_speed": 0.02,
+  "default": "stand",
+  "up": "stand",
+  "down": "stand",
+  "left": "left_walk",
+  "right": "right_walk",
+  "drag_start": "drag_start",
+  "drag": "drag",
+  "fall": "fall",
+  "fall_loop": "fall_loop",
+  "on_floor": "land",
+  "focus": "stand",
+  "patpat": "stand",
+  "random_act": [
+    {
+      "name": "站立",
+      "act_list": [
+        "stand"
+      ],
+      "act_prob": 1.0,
+      "act_type": 0
+    },
+    {
+      "name": "左右行走",
+      "act_list": [
+        "left_walk",
+        "right_walk",
+        "stand"
+      ],
+      "act_prob": 0.1,
+      "act_type": 3
+    },
+    {
+      "name": "睡觉",
+      "act_list": [
+        "fallasleep_onset",
+        "fallasleep_loop",
+        "fallasleep_wake"
+      ],
+      "act_prob": 0.1,
+      "act_type": 0
+    },
+    {
+      "name": "打喷嚏",
+      "act_list": [
+        "sneeze"
+      ],
+      "act_prob": 0.1,
+      "act_type": 0,
+      "entertainment": true
+    },
+    {
+      "name": "舔毛",
+      "act_list": [
+        "groom"
+      ],
+      "act_prob": 0.1,
+      "act_type": 2,
+      "entertainment": true
+    },
+    {
+      "name": "抓苍蝇",
+      "act_list": [
+        "flycatch"
+      ],
+      "act_prob": 0.1,
+      "act_type": 2,
+      "entertainment": true
+    },
+    {
+      "name": "摇尾巴",
+      "act_list": [
+        "tailshake"
+      ],
+      "act_prob": 0.1,
+      "act_type": 1,
+      "entertainment": true
+    },
+    {
+      "name": "打滚",
+      "act_list": [
+        "roll"
+      ],
+      "act_prob": 0.1,
+      "act_type": 3,
+      "entertainment": true
+    },
+    {
+      "name": "跳跃",
+      "act_list": [
+        "jump"
+      ],
+      "act_prob": 0.1,
+      "act_type": 3,
+      "entertainment": true
+    }
+  ],
+  "accessory_act": [
+    {
+      "name": "heart",
+      "act_list": [],
+      "acc_list": [
+        "heart"
+      ],
+      "act_type": [
+        0,
+        10000
+      ],
+      "follow_mouse": false,
+      "above_main": false,
+      "anchor": [
+        -18,
+        0
+      ]
+    }
+  ],
+  "item_favorite": {},
+  "item_dislike": {},
+  "restore_btn_offset": [
+    414,
+    270
+  ]
+}

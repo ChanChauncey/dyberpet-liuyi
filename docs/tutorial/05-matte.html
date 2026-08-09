@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能抠图</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="tutorial-card">
+        <div class="decoration decoration-1"></div>
+        <div class="decoration decoration-2"></div>
+
+        <h1 class="title">智能抠图</h1>
+        <p class="subtitle">去除绿幕背景</p>
+
+        <div class="flow-chart">
+            <div class="flow-step">
+                <div style="font-size: 32px; margin-bottom: 10px;">🟢</div>
+                <span>绿幕识别</span>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+                <div style="font-size: 32px; margin-bottom: 10px;">🔄</div>
+                <span>颜色替换</span>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+                <div style="font-size: 32px; margin-bottom: 10px;">✨</div>
+                <span>阴影移除</span>
+            </div>
+        </div>
+
+        <div class="comparison">
+            <div class="comparison-item">
+                <div class="comparison-label">处理前：绿幕视频</div>
+                <div style="height: 200px; background: #00E676; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                    <span style="font-size: 80px;">🐱</span>
+                </div>
+            </div>
+            <div class="comparison-item">
+                <div class="comparison-label">处理后：透明背景</div>
+                <div style="height: 200px; background: repeating-conic-gradient(#808080 0% 25%, #fff 0% 50%) 50% / 20px 20px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                    <span style="font-size: 80px;">🐱</span>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin: 30px 0;">
+            <h3 style="color: #533483; margin-bottom: 15px;">抠图效果细节</h3>
+            <div style="display: flex; gap: 20px;">
+                <div style="flex: 1; background: rgba(15, 52, 96, 0.5); border-radius: 8px; padding: 15px;">
+                    <p style="color: #7ee787; margin-bottom: 5px;">✓ 猫毛边缘清晰</p>
+                    <p style="font-size: 12px; color: #a0a0a0;">每帧独立采样，确保一致性</p>
+                </div>
+                <div style="flex: 1; background: rgba(15, 52, 96, 0.5); border-radius: 8px; padding: 15px;">
+                    <p style="color: #7ee787; margin-bottom: 5px;">✓ 颜色替换准确</p>
+                    <p style="font-size: 12px; color: #a0a0a0;">绿色 → 透明，无残留</p>
+                </div>
+                <div style="flex: 1; background: rgba(15, 52, 96, 0.5); border-radius: 8px; padding: 15px;">
+                    <p style="color: #7ee787; margin-bottom: 5px;">✓ 阴影完全移除</p>
+                    <p style="font-size: 12px; color: #a0a0a0;">消除地面投影</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="code-block">
+            <p style="color: #7ee787;"># 智能抠图命令</p>
+            <p>python tools/sam2_mask.py input_frames/ output_frames/</p>
+            <br>
+            <p style="color: #7ee787;"># 技术特点</p>
+            <p>每帧独立采样 + 颜色替换 + 阴影移除</p>
+        </div>
+
+        <div class="page-number">5/8</div>
+    </div>
+</body>
+</html>

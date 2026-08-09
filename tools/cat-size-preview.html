@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>猫占比对比 — 16:9 画面</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #1a1a2e; color: #ccc; font-family: system-ui; padding: 30px; }
+.row { margin-bottom: 36px; }
+.row h3 { color: #eee; margin-bottom: 16px; font-size: 18px; }
+.grid { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
+.frame {
+  position: relative; width: 896px; height: 504px; /* scaled 50% of 1920×1080 */
+  background: #00d068; border: 2px solid #555;
+}
+.frame::after {
+  content: attr(data-label);
+  position: absolute; top: 10px; left: 14px; font-size: 14px; color: rgba(0,0,0,.55); font-weight: 600; z-index: 10;
+}
+.cat {
+  position: absolute;
+  background: linear-gradient(180deg, #2a2a2a 40%, #f5f0e8 40%, #f5f0e8 70%, #2a2a2a 70%);
+  border-radius: 6px;
+  bottom: 50%;
+  transform: translateY(50%);
+}
+/* 猫正面：近似正方形 + 白手套示意 */
+.cat.front {
+  left: 50%;
+  transform: translate(-50%, 50%);
+}
+.cat.front::before {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0; height: 30%;
+  background: #f5f0e8;
+  border-radius: 0 0 4px 4px;
+}
+/* 猫侧面：长方形，模拟身体+尾巴 */
+.cat.walk {
+  left: 50%;
+  transform: translate(-50%, 50%);
+}
+.cat.walk::after {
+  content: '';
+  position: absolute; top: 35%; right: -30%; width: 30%; height: 10%;
+  background: #2a2a2a;
+  border-radius: 0 4px 4px 0;
+}
+.info {
+  position: absolute; bottom: 8px; left: 14px; font-size: 12px; color: rgba(0,0,0,.5); z-index: 10;
+}
+.verdict { position: absolute; top: 50%; right: 16px; transform: translateY(-50%); font-size: 22px; z-index: 10; }
+.highlight { border-color: #ffd700; box-shadow: 0 0 12px rgba(255,215,0,.4); }
+.label-top { margin-bottom: 8px; color: #999; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="row">
+  <h3>🐱 正面站立（待机姿态）</h3>
+  <p class="label-top">猫宽 ≈ 猫高 × 0.67 · 黑块 = 猫身体 · 白色底部 = 白手套</p>
+  <div class="grid" id="frontGrid"></div>
+</div>
+
+<div class="row">
+  <h3>🐱 走路侧面（最宽姿态 — 身体 + 尾巴伸展 + 前爪前迈）</h3>
+  <p class="label-top">猫宽 ≈ 猫高 × 2.0 · 右侧延伸块 = 尾巴</p>
+  <div class="grid" id="walkGrid"></div>
+</div>
+
+<script>
+const sizes = [
+  { pct: 35, h: 378, fw: 252, ww: 756, sideWalk: 582, walkPct: 39 },
+  { pct: 40, h: 432, fw: 288, ww: 864, sideWalk: 528, walkPct: 45 },
+  { pct: 45, h: 486, fw: 324, ww: 972, sideWalk: 474, walkPct: 51 },
+  { pct: 50, h: 540, fw: 360, ww: 1080, sideWalk: 420, walkPct: 56 },
+];
+
+const halfScale = 1920 / 896; // scale factor
+
+function verdict(s) {
+  if (s.walkPct > 55) return ['⚠️ 太挤', '#e74c3c'];
+  if (s.walkPct > 50) return ['✅', '#2ecc71'];
+  if (s.walkPct > 40) return ['✅ 安全', '#2ecc71'];
+  return ['✅ 过安全', '#f39c12'];
+}
+
+function render(sectionId, poseClass, widthVar) {
+  const grid = document.getElementById(sectionId);
+  sizes.forEach(s => {
+    const wRaw = s[widthVar];
+    const hRaw = s.h;
+    const w = Math.round(wRaw / halfScale);
+    const h = Math.round(hRaw / halfScale);
+    const side = Math.round(s.sideWalk / halfScale);
+    const [v, vc] = verdict(s);
+
+    const div = document.createElement('div');
+    div.className = 'frame' + (s.pct === 45 ? ' highlight' : '');
+    div.setAttribute('data-label', s.pct + '% — 猫高 ' + hRaw + 'px，猫宽 ' + wRaw + 'px');
+    div.innerHTML =
+      '<div class="cat ' + poseClass + '" style="width:' + w + 'px;height:' + h + 'px"></div>' +
+      '<div class="info">两侧余量 ≈ ' + side + 'px | 走路时猫占画面 ' + s.walkPct + '%</div>' +
+      '<div class="verdict" style="color:' + vc + '">' + v + '</div>';
+    grid.appendChild(div);
+  });
+}
+
+render('frontGrid', 'front', 'fw');
+render('walkGrid', 'walk', 'ww');
+</script>
+
+</body>
+</html>

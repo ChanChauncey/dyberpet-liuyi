@@ -1,0 +1,14 @@
+{
+  "pfp": "pfp.png",
+  "petName": "六一",
+  "coverImages": [
+    "cover1.png"
+  ],
+  "intro": "我是六一～一只元气满满的小猫，陪你在桌面上一起摸鱼、打滚、晒太阳！",
+  "author": {
+    "name": "爱小瑾的小选",
+    "pfp": "author.jpg",
+    "frameColor": "#FFB6C1",
+    "infos": ""
+  }
+}

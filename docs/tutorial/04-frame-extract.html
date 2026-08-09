@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>帧提取</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="tutorial-card">
+        <div class="decoration decoration-1"></div>
+        <div class="decoration decoration-2"></div>
+
+        <h1 class="title">帧提取</h1>
+        <p class="subtitle">从视频到图片序列</p>
+
+        <div class="flow-chart">
+            <div class="flow-step">
+                <div style="font-size: 32px; margin-bottom: 10px;">🎥</div>
+                <span>原始视频</span>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+                <div style="font-size: 32px; margin-bottom: 10px;">⚙️</div>
+                <span>frame_extractor.py</span>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+                <div style="font-size: 32px; margin-bottom: 10px;">🖼️</div>
+                <span>PNG序列</span>
+            </div>
+        </div>
+
+        <div class="comparison">
+            <div class="comparison-item">
+                <div class="comparison-label">处理前：视频</div>
+                <div style="height: 150px; background: rgba(15, 52, 96, 0.5); border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 15px;">
+                    <span style="font-size: 64px;">🎥</span>
+                </div>
+                <p style="font-size: 14px; color: #a0a0a0;">MP4格式，24fps</p>
+                <p style="font-size: 14px; color: #a0a0a0;">1920x1080 分辨率</p>
+            </div>
+            <div class="comparison-item">
+                <div class="comparison-label">处理后：PNG序列</div>
+                <div style="height: 150px; background: rgba(83, 52, 131, 0.3); border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 15px;">
+                    <span style="font-size: 32px;">🖼️</span>
+                    <span style="font-size: 32px;">🖼️</span>
+                    <span style="font-size: 32px;">🖼️</span>
+                    <span style="font-size: 32px;">🖼️</span>
+                    <span style="font-size: 32px;">🖼️</span>
+                </div>
+                <p style="font-size: 14px; color: #a0a0a0;">每帧独立PNG文件</p>
+                <p style="font-size: 14px; color: #a0a0a0;">frame_0000.png, frame_0001.png, ...</p>
+            </div>
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: 75%;"></div>
+        </div>
+        <p style="text-align: center; color: #a0a0a0; font-size: 14px;">处理进度：75%</p>
+
+        <div class="code-block">
+            <p style="color: #7ee787;"># 基础用法</p>
+            <p>python tools/frame_extractor.py video.mp4 frames/</p>
+            <br>
+            <p style="color: #7ee787;"># 高级参数</p>
+            <p>--every 2          # 每2帧取1帧（降采样）</p>
+            <p>--size 640x360     # 同时缩放到目标尺寸</p>
+            <br>
+            <p style="color: #7ee787;"># 示例</p>
+            <p>python tools/frame_extractor.py input.mp4 output/ --every 1 --size 640x360</p>
+        </div>
+
+        <div class="feature-list">
+            <div class="feature-item">
+                <div class="feature-icon">✓</div>
+                <span class="feature-text">支持中文路径输出</span>
+            </div>
+            <div class="feature-item">
+                <div class="feature-icon">✓</div>
+                <span class="feature-text">可选降采样（--every N）</span>
+            </div>
+            <div class="feature-item">
+                <div class="feature-icon">✓</div>
+                <span class="feature-text">可选缩放（--size WxH）</span>
+            </div>
+        </div>
+
+        <div class="page-number">4/8</div>
+    </div>
+</body>
+</html>

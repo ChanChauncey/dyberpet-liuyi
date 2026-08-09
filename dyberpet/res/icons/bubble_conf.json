@@ -1,0 +1,65 @@
+{
+    "fv_lvlup": {
+        "icon": "bb_fv_lvlup",
+        "message": "好感度升级啦，PETNAME好像对你更感兴趣了！",
+        "countdown": null,
+        "start_audio": null,
+        "end_audio": null
+    },
+    "fv_leveldown": {
+        "icon": "bb_fv_drop",
+        "message": "PETNAME太饿了，对你的好感度下降了...",
+        "countdown": null,
+        "start_audio": null,
+        "end_audio": null
+    },
+    "fv_drop": {
+        "icon": "bb_fv_drop",
+        "message": "",
+        "countdown": null,
+        "start_audio": null,
+        "end_audio": null
+    },
+    "hp_low": {
+        "icon": "bb_hp_low",
+        "message": "",
+        "countdown": null,
+        "start_audio": null,
+        "end_audio": null
+    },
+    "hp_zero": {
+        "icon": "bb_hp_zero",
+        "message": "",
+        "countdown": null,
+        "start_audio": null,
+        "end_audio": null
+    },
+    "feed_done": {
+        "icon": "bb_feed_done",
+        "message": "",
+        "countdown": null,
+        "start_audio": null,
+        "end_audio": null
+    },
+    "feed_required": {
+        "icon": null,
+        "message": "此时PETNAME好像很想要ITEMNAME哦~",
+        "countdown": 60,
+        "start_audio": null,
+        "end_audio": null
+    },
+    "pat_focus": {
+        "icon": "bb_pat_focus",
+        "message": "USERTAG You should be focusing on your work",
+        "countdown": null,
+        "start_audio": null,
+        "end_audio": null
+    },
+    "pat_frequent": {
+        "icon": "bb_pat_frequent",
+        "message": "",
+        "countdown": null,
+        "start_audio": null,
+        "end_audio": null
+    }
+}

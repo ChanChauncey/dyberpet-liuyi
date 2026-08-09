@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>配置调整</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="tutorial-card">
+        <div class="decoration decoration-1"></div>
+        <div class="decoration decoration-2"></div>
+
+        <h1 class="title">配置调整</h1>
+        <p class="subtitle">个性化定制你的桌面宠物</p>
+
+        <div class="config-comparison">
+            <div class="config-panel">
+                <h3>pet_conf.json</h3>
+                <p style="color: #a0a0a0; margin-bottom: 15px;">角色外观、动画配置</p>
+                <div class="code-block" style="font-size: 12px;">
+                    <p>{</p>
+                    <p style="margin-left: 20px;">"name": "六一",</p>
+                    <p style="margin-left: 20px;">"breed": "奶牛猫",</p>
+                    <p style="margin-left: 20px;">"animations": {</p>
+                    <p style="margin-left: 40px;">"stand": "stand",</p>
+                    <p style="margin-left: 40px;">"walk": "walk"</p>
+                    <p style="margin-left: 20px;">}</p>
+                    <p>}</p>
+                </div>
+            </div>
+            <div class="config-panel">
+                <h3>act_conf.json</h3>
+                <p style="color: #a0a0a0; margin-bottom: 15px;">动画概率、解锁条件</p>
+                <div class="code-block" style="font-size: 12px;">
+                    <p>{</p>
+                    <p style="margin-left: 20px;">"stand": {</p>
+                    <p style="margin-left: 40px;">"act_prob": 1.0,</p>
+                    <p style="margin-left: 40px;">"act_type": 0</p>
+                    <p style="margin-left: 20px;">},</p>
+                    <p style="margin-left: 20px;">"walk": {</p>
+                    <p style="margin-left: 40px;">"act_prob": 0.1,</p>
+                    <p style="margin-left: 40px;">"act_type": 3</p>
+                    <p style="margin-left: 20px;">}</p>
+                    <p>}</p>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin: 30px 0;">
+            <h3 style="color: #533483; margin-bottom: 15px;">个性化调整</h3>
+            <div style="display: flex; gap: 20px;">
+                <div style="flex: 1; background: rgba(15, 52, 96, 0.5); border-radius: 8px; padding: 15px;">
+                    <p style="color: #7ee787; margin-bottom: 5px;">动画速度</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 60%;"></div>
+                    </div>
+                    <p style="font-size: 12px; color: #a0a0a0;">调整 frame_refresh 参数</p>
+                </div>
+                <div style="flex: 1; background: rgba(15, 52, 96, 0.5); border-radius: 8px; padding: 15px;">
+                    <p style="color: #7ee787; margin-bottom: 5px;">互动频率</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 40%;"></div>
+                    </div>
+                    <p style="font-size: 12px; color: #a0a0a0;">调整 act_prob 参数</p>
+                </div>
+                <div style="flex: 1; background: rgba(15, 52, 96, 0.5); border-radius: 8px; padding: 15px;">
+                    <p style="color: #7ee787; margin-bottom: 5px;">解锁条件</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 80%;"></div>
+                    </div>
+                    <p style="font-size: 12px; color: #a0a0a0;">调整 act_type 参数</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="code-block">
+            <p style="color: #7ee787;"># 关键配置说明</p>
+            <p>act_prob: 动画触发概率（0-1）</p>
+            <p>act_type: 亲密度解锁阈值（0-4）</p>
+            <p>frame_refresh: 帧刷新速度（ms）</p>
+        </div>
+
+        <div class="page-number">7/8</div>
+    </div>
+</body>
+</html>

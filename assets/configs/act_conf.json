@@ -1,0 +1,301 @@
+{
+  "stand": {
+    "images": "stand",
+    "act_num": 1,
+    "frame_refresh": 0.04,
+    "frame_start": 0,
+    "frame_end": 120
+  },
+  "stand_idle": {
+    "images": "stand",
+    "act_num": 1,
+    "frame_refresh": 0.04,
+    "frame_start": 0,
+    "frame_end": 64
+  },
+  "stand_wag": {
+    "images": "stand",
+    "act_num": 1,
+    "frame_refresh": 0.04,
+    "frame_start": 65,
+    "frame_end": 120
+  },
+  "default": {
+    "images": "stand",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "up": {
+    "images": "stand",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "down": {
+    "images": "stand",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "left": {
+    "images": "stand",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "right": {
+    "images": "stand",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "right_walk": {
+    "images": "rightwalk",
+    "act_num": 1,
+    "frame_refresh": 0.04,
+    "need_move": true,
+    "direction": "right",
+    "frame_move": 10,
+    "move_phases": [
+      {
+        "start": 0,
+        "end": 36,
+        "speed": 0
+      },
+      {
+        "start": 36,
+        "end": 69,
+        "speed": "0->10"
+      },
+      {
+        "start": 70,
+        "end": 136,
+        "speed": 10
+      },
+      {
+        "start": 137,
+        "end": 157,
+        "speed": "10->0"
+      },
+      {
+        "start": 158,
+        "end": 193,
+        "speed": 0
+      }
+    ]
+  },
+  "left_walk": {
+    "images": "leftwalk",
+    "act_num": 1,
+    "frame_refresh": 0.04,
+    "need_move": true,
+    "direction": "left",
+    "frame_move": 10,
+    "move_phases": [
+      {
+        "start": 0,
+        "end": 36,
+        "speed": 0
+      },
+      {
+        "start": 36,
+        "end": 64,
+        "speed": "0->10"
+      },
+      {
+        "start": 65,
+        "end": 139,
+        "speed": 10
+      },
+      {
+        "start": 138,
+        "end": 148,
+        "speed": "10->0"
+      },
+      {
+        "start": 149,
+        "end": 193,
+        "speed": 0
+      }
+    ]
+  },
+  "drag_start": {
+    "images": "drag_start",
+    "act_num": 1,
+    "frame_refresh": 0.04,
+    "frame_start": 2,
+    "frame_end": 96
+  },
+  "drag_loop": {
+    "images": "drag_loop",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "drag": {
+    "images": "drag_loop",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "prefall": {
+    "images": "prefall",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "fall": {
+    "images": "fall",
+    "act_num": 1,
+    "frame_refresh": 0.02,
+    "frame_start": 18,
+    "frame_end": 192
+  },
+  "fall_loop": {
+    "images": "fall",
+    "act_num": 1,
+    "frame_refresh": 0.02,
+    "frame_start": 123,
+    "frame_end": 192
+  },
+  "land_bounce": {
+    "images": "land_bounce",
+    "act_num": 1,
+    "frame_refresh": 0.04,
+    "frame_start": 0,
+    "frame_end": 21
+  },
+  "land_stay": {
+    "images": "land_stay",
+    "act_num": 1,
+    "frame_refresh": 0.04,
+    "frame_start": 22,
+    "frame_end": 96
+  },
+  "land": {
+    "images": "land_stay",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "on_floor": {
+    "images": "land_stay",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "fallasleep_onset": {
+    "images": "fallasleep_onset",
+    "act_num": 1,
+    "frame_refresh": 0.04,
+    "frame_start": 0,
+    "frame_end": 144
+  },
+  "fallasleep_loop": {
+    "images": "fallasleep_loop",
+    "act_num": 1,
+    "frame_refresh": 0.04,
+    "frame_start": 0,
+    "frame_end": 144
+  },
+  "fallasleep_wake": {
+    "images": "fallasleep_wake",
+    "act_num": 1,
+    "frame_refresh": 0.04,
+    "frame_start": 0,
+    "frame_end": 168
+  },
+  "heart": {
+    "images": "heart",
+    "act_num": 1,
+    "frame_refresh": 0.08,
+    "direction": "up",
+    "frame_move": 2
+  },
+  "sneeze": {
+    "images": "sneeze",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "groom": {
+    "images": "groom",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "flycatch": {
+    "images": "flycatch",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "tailshake": {
+    "images": "tailshake",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "roll": {
+    "images": "roll",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "stretch": {
+    "images": "stretch",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "leftwalk": {
+    "images": "leftwalk",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "rightwalk": {
+    "images": "rightwalk",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "jump": {
+    "images": "jump",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "feed_猫粮": {
+    "images": "feed_猫粮",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "feed_汉堡": {
+    "images": "feed_汉堡",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "feed_薯条": {
+    "images": "feed_薯条",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "feed_果酱": {
+    "images": "feed_果酱",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "feed_苹果": {
+    "images": "feed_苹果",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "feed_香蕉": {
+    "images": "feed_香蕉",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "feed_小鱼干": {
+    "images": "feed_小鱼干",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "feed_冻干": {
+    "images": "feed_冻干",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "feed_酸奶": {
+    "images": "feed_酸奶",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  },
+  "feed_番茄炒蛋": {
+    "images": "feed_番茄炒蛋",
+    "act_num": 1,
+    "frame_refresh": 0.04
+  }
+}

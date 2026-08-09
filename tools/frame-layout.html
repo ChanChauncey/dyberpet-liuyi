@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>参考图布局 · 定稿 · 88%脚底</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #1a1a2e; color: #ccc; font-family: system-ui; padding: 30px; display: flex; gap: 50px; align-items: flex-start; justify-content: center; }
+.frame { position: relative; width: 960px; height: 540px; background: #00d068; border: 2px solid #555; flex-shrink: 0; border-radius: 6px; }
+.legend { min-width: 260px; }
+.legend h3 { color: #eee; margin-bottom: 20px; font-size: 20px; }
+.legend table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.legend td { padding: 8px 12px; border-bottom: 1px solid #333; }
+.legend td:first-child { color: #999; }
+.legend td:last-child { color: #eee; text-align: right; font-family: 'Cascadia Code', monospace; }
+.note { margin-top: 24px; padding: 14px; background: rgba(255,215,0,.08); border-left: 3px solid #ffd700; border-radius: 0 6px 6px 0; font-size: 13px; line-height: 1.7; color: #bbb; }
+</style>
+</head>
+<body>
+
+<div class="frame">
+  <canvas id="c" width="960" height="540"></canvas>
+</div>
+
+<div class="legend">
+  <h3>🖼 参考图布局 · 定稿</h3>
+  <table>
+    <tr><td>画幅</td><td>16:9 · 1920×1080</td></tr>
+    <tr><td>背景色</td><td>#00E676 中等亮绿</td></tr>
+    <tr><td>猫尺寸</td><td>540px 高（画面 50%）</td></tr>
+    <tr><td>脚底位置</td><td>距画面顶部 85%</td></tr>
+    <tr><td>下方安全区</td><td>162px（15%）</td></tr>
+    <tr><td>上方可用区</td><td>378px（35%）</td></tr>
+    <tr><td style="padding-top:16px;color:#ffd700;font-weight:600">跳跃空间</td><td style="padding-top:16px;color:#ffd700;font-weight:600">378px ≈ 猫高×0.7</td></tr>
+  </table>
+  <div class="note">
+    ✅ 猫踩在地面上，上方留出 70% 猫高的跳跃/伸展空间<br>
+    ✅ 下方162px绿幕足够SAM 2识别猫脚与地面分离<br>
+    ✅ 16:9横向布局保证走路时尾巴不碰边框
+  </div>
+</div>
+
+<script>
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+const W = 960, H = 540;
+const catH = 270, catW = 181;
+const feetY = 459;      // 918/2 = 85% from top
+const catTop = feetY - catH;
+const bx = W/2 - catW/2, by = catTop;
+
+// Ground line
+ctx.strokeStyle = 'rgba(0,0,0,.45)';
+ctx.lineWidth = 2;
+ctx.setLineDash([8, 3]);
+ctx.beginPath(); ctx.moveTo(0, feetY); ctx.lineTo(W, feetY); ctx.stroke();
+ctx.setLineDash([]);
+ctx.fillStyle = 'rgba(0,0,0,.5)';
+ctx.font = 'bold 13px system-ui';
+ctx.fillText('地面 ── 脚底在此（距顶 85% = 918px）', 12, feetY - 8);
+
+// Below-ground zone
+ctx.fillStyle = 'rgba(0,0,0,.1)';
+ctx.fillRect(0, feetY, W, H - feetY);
+ctx.fillStyle = 'rgba(0,0,0,.38)';
+ctx.font = '12px system-ui';
+ctx.fillText('地面以下 15% · 162px 绿幕安全区', 14, H - 12);
+
+// Above-cat zone
+ctx.fillStyle = 'rgba(255,255,255,.08)';
+ctx.fillRect(0, 0, W, catTop);
+ctx.fillStyle = 'rgba(255,215,0,.78)';
+ctx.font = 'bold 12px system-ui';
+ctx.fillText('跳跃 / 伸展可用空间  378px（画面 35%）≈ 猫高×0.7', 14, catTop - 10);
+
+// Jump arcs
+ctx.strokeStyle = 'rgba(255,215,0,.35)';
+ctx.lineWidth = 2.5;
+ctx.setLineDash([5, 5]);
+ctx.beginPath(); ctx.moveTo(W/2 - 50, feetY - 8);
+ctx.quadraticCurveTo(W/2 - 5, catTop - 110, W/2 + 50, feetY - 8);
+ctx.stroke();
+ctx.beginPath(); ctx.moveTo(W/2 - 90, feetY - 8);
+ctx.quadraticCurveTo(W/2 - 15, catTop - 130, W/2 + 30, feetY - 8);
+ctx.stroke();
+ctx.setLineDash([]);
+ctx.fillStyle = 'rgba(255,215,0,.85)';
+ctx.font = 'bold 12px system-ui';
+ctx.fillText('⬆ 跳跃弧线', W/2 + 40, feetY - 155);
+
+// ---- CAT ----
+// Tail
+ctx.strokeStyle = '#1a1a1a';
+ctx.lineWidth = 9;
+ctx.lineCap = 'round';
+ctx.beginPath();
+ctx.moveTo(bx + catW - 8, feetY - 55);
+ctx.quadraticCurveTo(bx + catW + 55, feetY - 95, bx + catW + 25, feetY - 165);
+ctx.stroke();
+ctx.lineWidth = 7;
+ctx.beginPath();
+ctx.moveTo(bx + catW + 25, feetY - 165);
+ctx.quadraticCurveTo(bx + catW - 8, feetY - 185, bx + catW + 15, feetY - 202);
+ctx.stroke();
+
+// Body
+const bg = ctx.createLinearGradient(0, by, 0, feetY);
+bg.addColorStop(0, '#1a1a1a');
+bg.addColorStop(0.33, '#2a2a2a');
+bg.addColorStop(0.34, '#f5f0e8');
+bg.addColorStop(0.63, '#f5f0e8');
+bg.addColorStop(0.64, '#2a2a2a');
+ctx.fillStyle = bg;
+ctx.beginPath();
+ctx.roundRect(bx, by, catW, catH, 12);
+ctx.fill();
+
+// Chest blaze
+ctx.fillStyle = '#fefefe';
+ctx.beginPath();
+ctx.moveTo(bx + catW/2, by + catH * 0.38);
+ctx.quadraticCurveTo(bx + catW/2 - 22, by + catH * 0.50, bx + catW/2, by + catH * 0.56);
+ctx.quadraticCurveTo(bx + catW/2 + 22, by + catH * 0.50, bx + catW/2, by + catH * 0.38);
+ctx.fill();
+
+// Paws
+for (let px of [bx + 8, bx + catW - 16]) {
+  ctx.fillStyle = '#fefefe';
+  ctx.beginPath();
+  ctx.roundRect(px, feetY - 22, 16, 20, 7);
+  ctx.fill();
+}
+
+// Ears
+ctx.fillStyle = '#1a1a1a';
+ctx.beginPath(); ctx.moveTo(bx + 15, by); ctx.lineTo(bx - 4, by - 35); ctx.lineTo(bx + 36, by - 4); ctx.fill();
+ctx.beginPath(); ctx.moveTo(bx + catW - 15, by); ctx.lineTo(bx + catW + 4, by - 35); ctx.lineTo(bx + catW - 36, by - 4); ctx.fill();
+ctx.fillStyle = '#e8c8a8';
+ctx.beginPath(); ctx.moveTo(bx + 16, by + 3); ctx.lineTo(bx + 3, by - 25); ctx.lineTo(bx + 30, by - 1); ctx.fill();
+ctx.beginPath(); ctx.moveTo(bx + catW - 16, by + 3); ctx.lineTo(bx + catW - 3, by - 25); ctx.lineTo(bx + catW - 30, by - 1); ctx.fill();
+
+// Eyes
+ctx.fillStyle = '#d4a020';
+ctx.beginPath(); ctx.arc(bx + catW/2 - 25, by + catH * 0.24, 11, 0, Math.PI * 2); ctx.fill();
+ctx.beginPath(); ctx.arc(bx + catW/2 + 25, by + catH * 0.24, 11, 0, Math.PI * 2); ctx.fill();
+ctx.fillStyle = '#111';
+ctx.beginPath(); ctx.arc(bx + catW/2 - 25, by + catH * 0.24, 5.5, 0, Math.PI * 2); ctx.fill();
+ctx.beginPath(); ctx.arc(bx + catW/2 + 25, by + catH * 0.24, 5.5, 0, Math.PI * 2); ctx.fill();
+
+// Nose
+ctx.fillStyle = '#e898a8';
+ctx.beginPath(); ctx.moveTo(bx + catW/2, by + catH * 0.33);
+ctx.lineTo(bx + catW/2 - 5, by + catH * 0.36);
+ctx.lineTo(bx + catW/2 + 5, by + catH * 0.36);
+ctx.fill();
+
+// Whiskers
+ctx.strokeStyle = 'rgba(255,255,255,.42)';
+ctx.lineWidth = 1.2;
+for (let side of [-1, 1]) {
+  for (let dy of [-5, 0, 5]) {
+    ctx.beginPath();
+    ctx.moveTo(bx + catW/2 + side * 22, by + catH * 0.34 + dy);
+    ctx.lineTo(bx + catW/2 + side * 68, by + catH * 0.34 + dy - 12);
+    ctx.stroke();
+  }
+}
+
+// Height dimension
+ctx.fillStyle = 'rgba(0,0,0,.5)';
+ctx.font = 'bold 14px system-ui';
+const ax = bx - 50;
+ctx.strokeStyle = 'rgba(0,0,0,.35)';
+ctx.lineWidth = 2;
+ctx.beginPath(); ctx.moveTo(ax, by); ctx.lineTo(ax, feetY); ctx.stroke();
+ctx.beginPath(); ctx.moveTo(ax - 6, by + 10); ctx.lineTo(ax, by); ctx.lineTo(ax + 6, by + 10); ctx.stroke();
+ctx.beginPath(); ctx.moveTo(ax - 6, feetY - 10); ctx.lineTo(ax, feetY); ctx.lineTo(ax + 6, feetY - 10); ctx.stroke();
+ctx.fillText('540px', ax - 78, (by + feetY)/2 + 6);
+ctx.fillText('(50%)', ax - 68, (by + feetY)/2 + 22);
+
+// Vertical pointer
+ctx.fillText('距顶 918px = 85%', bx + catW + 55, feetY - 30);
+
+// Frame label
+ctx.fillStyle = 'rgba(0,0,0,.6)';
+ctx.font = 'bold 14px system-ui';
+ctx.fillText('1920×1080 · 16:9 · 绿幕 #00E676', 14, 24);
+</script>
+
+</body>
+</html>

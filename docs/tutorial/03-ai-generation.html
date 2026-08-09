@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI图像生成 + 视频生成</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="tutorial-card">
+        <div class="decoration decoration-1"></div>
+        <div class="decoration decoration-2"></div>
+
+        <h1 class="title">AI图像生成 + 视频生成</h1>
+        <p class="subtitle">素材制作第一步（两步流程）</p>
+
+        <div style="display: flex; flex-direction: column; gap: 16px; margin: 30px 0;">
+            <!-- Step 1: Image Generation -->
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <div class="flow-step" style="flex: 1; max-width: 360px;">
+                    <div style="font-size: 28px; margin-bottom: 8px;">📷 → 🎨</div>
+                    <span class="step-label">真实照片 → AI图像生成</span>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step" style="flex: 1; max-width: 240px;">
+                    <div style="font-size: 28px; margin-bottom: 8px;">🖼️</div>
+                    <span class="step-label">皮克斯风格图片</span>
+                </div>
+            </div>
+            <!-- Step 2: Video Generation -->
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <div class="flow-step" style="flex: 1; max-width: 360px;">
+                    <div style="font-size: 28px; margin-bottom: 8px;">🖼️ → 🎬</div>
+                    <span class="step-label">图片 + 动作描述 → AI视频生成</span>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step" style="flex: 1; max-width: 240px;">
+                    <div style="font-size: 28px; margin-bottom: 8px;">🎥</div>
+                    <span class="step-label">原始视频</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="comparison">
+            <div class="comparison-item">
+                <div class="comparison-label">第一步：AI图像生成</div>
+                <div style="height: 150px; background: rgba(15, 52, 96, 0.5); border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 15px;">
+                    <span style="font-size: 64px;">🐱</span>
+                </div>
+                <p style="font-size: 14px; color: #a0a0a0;">输入：真实猫咪照片</p>
+                <p style="font-size: 14px; color: #a0a0a0;">输出：皮克斯风格图片</p>
+                <div class="tool-icons" style="margin-top: 15px;">
+                    <div class="tool-icon">
+                        <span style="font-size: 20px;">🎭</span>
+                        <span>Midjourney</span>
+                    </div>
+                    <div class="tool-icon">
+                        <span style="font-size: 20px;">🤖</span>
+                        <span>DALL-E</span>
+                    </div>
+                </div>
+            </div>
+            <div class="comparison-item">
+                <div class="comparison-label">第二步：AI视频生成</div>
+                <div style="height: 150px; background: rgba(83, 52, 131, 0.3); border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 15px;">
+                    <span style="font-size: 64px;">🎬</span>
+                </div>
+                <p style="font-size: 14px; color: #a0a0a0;">输入：皮克斯风格图片 + 动作描述</p>
+                <p style="font-size: 14px; color: #a0a0a0;">输出：猫咪动作视频</p>
+                <div class="tool-icons" style="margin-top: 15px;">
+                    <div class="tool-icon">
+                        <span style="font-size: 20px;">🎥</span>
+                        <span>Runway</span>
+                    </div>
+                    <div class="tool-icon">
+                        <span style="font-size: 20px;">🐉</span>
+                        <span>Kling</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="code-block">
+            <p style="color: #7ee787;">// 提示词模板</p>
+            <p>A cute black and white cow cat with yellow eyes, Pixar style, green screen background, [动作描述]</p>
+            <br>
+            <p style="color: #7ee787;">// 视频参数</p>
+            <p>1920x1080, 24fps, MP4, 3-5秒</p>
+        </div>
+
+        <div class="page-number">3/8</div>
+    </div>
+</body>
+</html>
