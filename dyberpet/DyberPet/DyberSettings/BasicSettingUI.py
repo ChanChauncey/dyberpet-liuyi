@@ -1,7 +1,9 @@
 # coding:utf-8
 import os
 import json
+import threading
 import urllib.request
+import urllib.error
 from sys import platform
 
 from qfluentwidgets import (SettingCardGroup, SwitchSettingCard, HyperlinkCard,InfoBar,
@@ -9,7 +11,7 @@ from qfluentwidgets import (SettingCardGroup, SwitchSettingCard, HyperlinkCard,I
                             PushSettingCard, setThemeColor)
 
 from qfluentwidgets import FluentIcon as FIF
-from PySide6.QtCore import Qt, Signal, QUrl, QStandardPaths, QLocale
+from PySide6.QtCore import Qt, Signal, QUrl, QStandardPaths, QLocale, QTimer
 from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWidgets import QWidget, QLabel, QApplication
 #from qframelesswindow import FramelessWindow
@@ -389,10 +391,16 @@ class SettingInterface(ScrollArea):
             else:
                 return False, local_version + "  " + self.tr("Already the latest")
         else:
-            return False, self.tr("Failed to check updates. Please check the website.")
+            return False, self.tr("检查更新失败：网络异常或无法访问 GitHub，请稍后重试或前往项目主页查看。")
 
     def _onCheckUpdateClicked(self):
-        has_update, info = self._checkUpdate()
+        # 网络请求放到后台线程，避免界面卡顿（GitHub 国内访问可能较慢）
+        def _worker():
+            has_update, info = self._checkUpdate()
+            QTimer.singleShot(0, lambda: self._showUpdateResult(has_update, info))
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _showUpdateResult(self, has_update, info):
         if has_update:
             InfoBar.success(
                 title=self.tr('发现新版本'),
@@ -435,13 +443,28 @@ class SettingInterface(ScrollArea):
 
 
 
-def get_latest_version():
+def get_latest_version(timeout=10):
+    """向 GitHub 拉取最新 Release 版本号。
+
+    返回 (success: bool, version_or_None)
+    - 网络不可达 / 超时 / 接口异常 -> (False, None)
+    - 拉取成功 -> (True, tag_name 字符串)
+    """
     url = settings.RELEASE_API
+    req = urllib.request.Request(url, headers={
+        # GitHub API 要求带 User-Agent，否则可能被拒
+        'User-Agent': f'LiuYiDesktopPet/{settings.VERSION}',
+        'Accept': 'application/vnd.github+json',
+    })
     try:
-        with urllib.request.urlopen(url) as response:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
             data = json.loads(response.read())
-            return True, data['tag_name']
-    except Exception as e:
+            return True, data.get('tag_name')
+    except urllib.error.HTTPError as e:
+        # 4xx/5xx（如 403 限流、404 私有库）——明确失败但不崩
+        return False, None
+    except (urllib.error.URLError, TimeoutError, OSError):
+        # 网络不可达 / DNS 失败 / 超时（GitHub 国内访问不稳）
         return False, None
 
 def compare_versions(local_version, github_version):
