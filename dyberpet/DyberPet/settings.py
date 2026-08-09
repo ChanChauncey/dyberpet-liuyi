@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import shutil
 import ctypes
 from sys import platform
 from collections import defaultdict
@@ -12,7 +13,9 @@ from PySide6 import QtCore
 if platform == 'win32':
     if getattr(sys, 'frozen', False):
         basedir = os.path.dirname(sys.executable)
-        configdir = basedir
+        # 用户可写数据目录：%LOCALAPPDATA%\六一桌宠
+        # 避免写入 Program Files 导致权限不足
+        configdir = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), '六一桌宠')
     else:
         basedir = ''
         configdir = ''
@@ -29,7 +32,7 @@ if platform == 'linux':
     configdir = os.path.dirname(os.environ['HOME']+'/.config/DyberPet/DyberPet')
     CONFIGDIR = configdir
 elif platform == 'win32':
-    # configdir already set above (frozen: exe dir, source: empty)
+    # configdir already set above
     CONFIGDIR = configdir
 else:
     configdir = basedir
@@ -291,6 +294,16 @@ def init_settings():
     global file_path, settingGood
     file_path = os.path.join(configdir, 'data/settings.json')
 
+    # 迁移旧设置：如果用户数据目录在 %LOCALAPPDATA%，且安装目录下有旧的 settings.json，则自动复制一次
+    if platform == 'win32' and getattr(sys, 'frozen', False) and BASEDIR != configdir:
+        old_file_path = os.path.join(BASEDIR, 'data/settings.json')
+        if os.path.isfile(old_file_path) and not os.path.isfile(file_path):
+            try:
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                shutil.copy2(old_file_path, file_path)
+            except Exception:
+                pass  # 迁移失败也不影响后续初始化
+
     global gravity, fixdragspeedx, fixdragspeedy, tunable_scale, scale_dict, volume, \
            language_code, on_top_hint, default_pet, defaultAct, themeColor, minipet_scale, \
            toaster_on, usertag_dict, auto_lock, bubble_on, poop_enabled
@@ -435,6 +448,10 @@ def save_settings():
                'poop_enabled':poop_enabled
                }
 
+    try:
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    except Exception:
+        pass
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(data_js, f, ensure_ascii=False, indent=4)
 
