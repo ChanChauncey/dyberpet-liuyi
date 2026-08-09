@@ -43,7 +43,7 @@
 │   │   ├── bubbleManager.py   #     气泡行为逻辑层
 │   │   ├── Dashboard/         #     仪表盘（状态/背包/商店/任务）
 │   │   └── DyberSettings/     #     设置面板（基本设置/存档/角色卡/物品MOD）
-│   ├── res/role/六一/          #   奶牛猫六一（→ assets/configs/ 是配置源）
+│   ├── res/role/六一/          #   小猫六一（→ assets/configs/ 是配置源）
 │   └── res/role/花椒/          #   白猫花椒（像素占位，仅 stand 动画，待正式素材替换）
 ├── assets/                    # 素材与配置（唯一编辑源）
 │   └── configs/               #   pet_conf.json + act_conf.json

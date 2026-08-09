@@ -207,7 +207,7 @@ python tools/copy_configs.py
 
 ### 原项目
 
-[DyberPet](https://github.com/ChaozhongLiu/DyberPet) 是本项目的底层框架，特别感谢 [DyberPet](https://github.com/ChaozhongLiu/DyberPet) 提供的框架和设计灵感，让我家的奶牛猫"六一"实现了"数字永生"——从一只真实的猫，变成了永远陪伴在桌面上的数字生命。
+[DyberPet](https://github.com/ChaozhongLiu/DyberPet) 是本项目的底层框架，特别感谢 [DyberPet](https://github.com/ChaozhongLiu/DyberPet) 提供的框架和设计灵感，让我家的小猫"六一"实现了"数字永生"——从一只真实的猫，变成了永远陪伴在桌面上的数字生命。
 
 ### 素材制作流程
 

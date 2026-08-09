@@ -995,7 +995,7 @@ git commit -m "feat: 添加精灵图部署页面"
                 <div class="code-block" style="font-size: 12px;">
                     <p>{</p>
                     <p style="margin-left: 20px;">"name": "六一",</p>
-                    <p style="margin-left: 20px;">"breed": "奶牛猫",</p>
+                    <p style="margin-left: 20px;">"breed": "小猫",</p>
                     <p style="margin-left: 20px;">"animations": {</p>
                     <p style="margin-left: 40px;">"stand": "stand",</p>
                     <p style="margin-left: 40px;">"walk": "walk"</p>
