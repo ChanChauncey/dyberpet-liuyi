@@ -43,6 +43,7 @@ class SettingInterface(ScrollArea):
     ontop_changed = Signal(name='ontop_changed')
     scale_changed = Signal(name='scale_changed')
     lang_changed = Signal(name='lang_changed')
+    checkUpdateFinished = Signal(bool, str)
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
@@ -229,6 +230,15 @@ class SettingInterface(ScrollArea):
         # About / 更新 =================================================================================
         self.AboutGroup = SettingCardGroup(self.tr('关于 / About'), self.scrollWidget)
 
+        self.VersionCard = HyperlinkCard(
+            settings.RELEASE_URL,
+            self.tr('前往 Releases'),
+            FIF.INFO,
+            self.tr('当前版本'),
+            self.tr(settings.VERSION),
+            parent=self.AboutGroup
+        )
+
         self.CheckUpdateCard = PushSettingCard(
             self.tr('检查更新'),
             FIF.SYNC,
@@ -237,15 +247,7 @@ class SettingInterface(ScrollArea):
             parent=self.AboutGroup
         )
         self.CheckUpdateCard.clicked.connect(self._onCheckUpdateClicked)
-
-        self.ReleaseCard = HyperlinkCard(
-            settings.RELEASE_URL,
-            self.tr('打开 Releases'),
-            FIF.LINK,
-            self.tr('最新版本下载'),
-            self.tr('访问 GitHub Releases 获取最新安装包'),
-            parent=self.AboutGroup
-        )
+        self.checkUpdateFinished.connect(self._showUpdateResult)
 
         self.__initWidget()
 
@@ -286,8 +288,8 @@ class SettingInterface(ScrollArea):
 
         self.ShortcutGroup.addSettingCard(self.ShortcutCard)
 
+        self.AboutGroup.addSettingCard(self.VersionCard)
         self.AboutGroup.addSettingCard(self.CheckUpdateCard)
-        self.AboutGroup.addSettingCard(self.ReleaseCard)
 
         # add setting card group to layout
         self.expandLayout.setSpacing(28)
@@ -391,7 +393,7 @@ class SettingInterface(ScrollArea):
             else:
                 return False, local_version + "  " + self.tr("Already the latest")
         else:
-            return False, self.tr("检查更新失败：网络异常或无法访问 GitHub，请稍后重试或前往项目主页查看。")
+            return False, self.tr("无法连接 GitHub：请检查网络/代理（需与浏览器一致的出口），或手动查看 ") + settings.RELEASE_URL
 
     def _onCheckUpdateClicked(self):
         # 网络请求放到后台线程，避免界面卡顿（GitHub 国内访问可能较慢）
@@ -399,7 +401,7 @@ class SettingInterface(ScrollArea):
             title=self.tr('检查更新'),
             content=self.tr('正在检查新版本...'),
             duration=2000,
-            position=InfoBarPosition.BOTTOM,
+            position=InfoBarPosition.TOP,
             parent=self.window()
         )
 
@@ -409,16 +411,22 @@ class SettingInterface(ScrollArea):
             except Exception as e:
                 print('[CheckUpdate] worker exception:', e)
                 has_update, info = False, self.tr('检查更新失败：网络异常或无法访问 GitHub，请稍后重试。')
-            QTimer.singleShot(0, lambda: self._showUpdateResult(has_update, info))
+            # 跨线程用 Signal 回主线程（QTimer 在 worker 线程无事件循环不会触发）
+            self.checkUpdateFinished.emit(has_update, info)
         threading.Thread(target=_worker, daemon=True).start()
 
     def _showUpdateResult(self, has_update, info):
+        # 同时把结果写回卡片副标题，确保一定可见
+        try:
+            self.CheckUpdateCard.setContent(info)
+        except Exception:
+            pass
         if has_update:
             InfoBar.success(
                 title=self.tr('发现新版本'),
                 content=info,
                 duration=5000,
-                position=InfoBarPosition.BOTTOM,
+                position=InfoBarPosition.TOP,
                 parent=self.window()
             )
         else:
@@ -426,7 +434,7 @@ class SettingInterface(ScrollArea):
                 title=self.tr('检查更新'),
                 content=info,
                 duration=4000,
-                position=InfoBarPosition.BOTTOM,
+                position=InfoBarPosition.TOP,
                 parent=self.window()
             )
 
@@ -455,29 +463,121 @@ class SettingInterface(ScrollArea):
 
 
 
-def get_latest_version(timeout=10):
+def _detect_system_proxies():
+    """检测系统代理。优先用 urllib.request.getproxies()（Windows 下读注册表），失败再手动读注册表。"""
+    proxies = {}
+    try:
+        # Python 内置跨平台代理检测，Windows 下会读 IE/系统代理设置
+        proxies = urllib.request.getproxies()
+    except Exception:
+        proxies = {}
+    if proxies:
+        result = {}
+        for k in ('http', 'https'):
+            if k in proxies and proxies[k]:
+                result[k] = proxies[k]
+        if result:
+            return result
+
+    # 兜底：手动读注册表（兼容 getproxies 未覆盖到的情况）
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Software\Microsoft\Windows\CurrentVersion\Internet Settings") as key:
+            enabled, _ = winreg.QueryValueEx(key, "ProxyEnable")
+            if not enabled:
+                return None
+            server, _ = winreg.QueryValueEx(key, "ProxyServer")
+            if not server:
+                return None
+        server = server.strip()
+        if "=" in server:
+            result = {}
+            for part in server.split(";"):
+                if "=" in part:
+                    scheme, addr = part.split("=", 1)
+                    scheme = scheme.strip().lower()
+                    addr = addr.strip()
+                    if addr:
+                        result[scheme] = addr if addr.startswith("http") else f"http://{addr}"
+            if "https" not in result and "http" in result:
+                result["https"] = result["http"]
+            return result if result else None
+        else:
+            addr = server if server.startswith("http") else f"http://{server}"
+            return {"http": addr, "https": addr}
+    except Exception:
+        return None
+
+
+def _update_log(message):
+    """把检查更新诊断日志写到数据目录，方便排查。"""
+    try:
+        log_dir = os.path.join(settings.CONFIGDIR, 'logs')
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, 'update_check.log')
+        from datetime import datetime
+        with open(log_path, 'a', encoding='utf-8') as f:
+            f.write(f"{datetime.now().isoformat()} {message}\n")
+    except Exception:
+        pass
+
+
+def _http_get_json(url, proxies=None, timeout=15):
+    """发起 GET 请求并返回 (status_code, body_bytes) 或抛出异常。"""
+    req = urllib.request.Request(url, headers={
+        'User-Agent': f'LiuYiDesktopPet/{settings.VERSION}',
+        'Accept': 'application/vnd.github+json',
+    })
+    if proxies:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler(proxies))
+        response = opener.open(req, timeout=timeout)
+    else:
+        response = urllib.request.urlopen(req, timeout=timeout)
+    with response:
+        return response.status, response.read()
+
+
+def get_latest_version(timeout=20):
     """向 GitHub 拉取最新 Release 版本号。
 
     返回 (success: bool, version_or_None)
     - 网络不可达 / 超时 / 接口异常 -> (False, None)
     - 拉取成功 -> (True, tag_name 字符串)
+
+    依次尝试：Windows 系统代理 -> 直连（urllib 默认已读 HTTP_PROXY/HTTPS_PROXY 环境变量）。
+    国内访问 GitHub 常需经系统代理，而 Python urllib 不会自动继承 Windows 系统代理，故显式读取。
     """
     url = settings.RELEASE_API
-    req = urllib.request.Request(url, headers={
-        # GitHub API 要求带 User-Agent，否则可能被拒
-        'User-Agent': f'LiuYiDesktopPet/{settings.VERSION}',
-        'Accept': 'application/vnd.github+json',
-    })
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as response:
-            data = json.loads(response.read())
+    _update_log(f"start checking update, url={url}")
+
+    # 构造候选代理列表：系统代理 -> 环境变量代理 -> 直连
+    proxies_list = []
+    sys_proxy = _detect_system_proxies()
+    if sys_proxy:
+        proxies_list.append(sys_proxy)
+        _update_log(f"detected system proxy: {sys_proxy}")
+    else:
+        _update_log("no system proxy detected")
+    proxies_list.append(None)
+
+    last_err = None
+    for proxies in proxies_list:
+        label = str(proxies) if proxies else 'direct'
+        try:
+            _update_log(f"trying {label}")
+            status, body = _http_get_json(url, proxies=proxies, timeout=timeout)
+            _update_log(f"success via {label}, status={status}")
+            data = json.loads(body)
             return True, data.get('tag_name')
-    except urllib.error.HTTPError as e:
-        # 4xx/5xx（如 403 限流、404 私有库）——明确失败但不崩
-        return False, None
-    except (urllib.error.URLError, TimeoutError, OSError):
-        # 网络不可达 / DNS 失败 / 超时（GitHub 国内访问不稳）
-        return False, None
+        except Exception as e:
+            last_err = e
+            _update_log(f"failed via {label}: {type(e).__name__}: {e}")
+            continue
+
+    # 全部出口都失败（网络不可达 / DNS / 超时 / 限流）
+    _update_log(f"all methods failed, last error: {type(last_err).__name__}: {last_err}")
+    return False, None
 
 def compare_versions(local_version, github_version):
     # Remove 'v' prefix from version strings

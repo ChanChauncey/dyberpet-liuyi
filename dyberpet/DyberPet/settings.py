@@ -43,7 +43,7 @@ DEFAULT_THEME_COL = "#009faa"
 HELP_URL = "https://github.com/ChaozhongLiu/DyberPet/issues"
 PROJECT_URL = "https://github.com/ChaozhongLiu/DyberPet"
 DEVDOC_URL = "https://github.com/ChaozhongLiu/DyberPet/blob/main/docs/art_dev.md"
-VERSION = "v1.0.1"
+VERSION = "v1.0.2"
 AUTHOR = "https://github.com/ChaozhongLiu"
 CHARCOLLECT_LINK = "https://github.com/ChaozhongLiu/DyberPet/blob/main/docs/collection.md"
 ITEMCOLLECT_LINK = "https://github.com/ChaozhongLiu/DyberPet/blob/main/docs/collection.md"
@@ -298,6 +298,7 @@ def init_settings():
     if platform == 'win32' and getattr(sys, 'frozen', False) and BASEDIR != configdir:
         old_data_dir = os.path.join(BASEDIR, 'data')
         new_data_dir = os.path.dirname(file_path)
+        old_file_path = os.path.join(old_data_dir, 'settings.json')
         if os.path.isdir(old_data_dir) and not os.path.isdir(new_data_dir):
             try:
                 shutil.copytree(old_data_dir, new_data_dir)

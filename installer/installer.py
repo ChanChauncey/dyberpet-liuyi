@@ -138,6 +138,44 @@ def parse_resume():
     return {"target": target, "opts": opts}
 
 
+# ---------- 进程检测/关闭 ----------
+def is_program_running():
+    """检测桌宠主程序(六一桌宠.exe)是否正在运行。"""
+    name = APP_NAME + ".exe"
+    try:
+        out = subprocess.check_output(
+            ["tasklist", "/FI", "IMAGENAME eq " + name],
+            stderr=subprocess.DEVNULL, timeout=10,
+        )
+        # 中文 Windows 控制台多为 gbk/cp936，多编码兜底解码
+        text = None
+        for enc in ("gbk", "cp936", "mbcs", "utf-8"):
+            try:
+                text = out.decode(enc)
+                break
+            except Exception:
+                continue
+        if text is None:
+            text = out.decode("utf-8", errors="ignore")
+        return name.lower() in text.lower()
+    except Exception:
+        return False
+
+
+def kill_program():
+    """强制结束桌宠主程序，返回是否成功。"""
+    name = APP_NAME + ".exe"
+    try:
+        r = subprocess.run(
+            ["taskkill", "/F", "/IM", name],
+            capture_output=True, text=True, encoding="utf-8", errors="ignore",
+            timeout=10,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
 # ---------- 系统操作辅助 ----------
 def create_shortcut(lnk_path, target, workdir, icon, desc=""):
     import win32com.client
@@ -664,6 +702,27 @@ class MainWindow(QWidget):
         if not dst:
             QMessageBox.warning(self, "提示", "请先选择安装位置。")
             return
+        # 安装前检测桌宠是否在运行：运行中的 exe 会被系统锁文件，
+        # 覆盖写入会导致安装异常/旧文件残留，故先提醒并可由安装程序代为关闭
+        if is_program_running():
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Warning)
+            msg.setWindowTitle("检测到程序正在运行")
+            msg.setText("安装程序检测到「" + APP_NAME + "」正在运行。")
+            msg.setInformativeText(
+                "继续安装会覆盖其文件，可能导致安装异常或程序崩溃。\n\n"
+                "建议先关闭正在运行的程序再继续。是否由安装程序自动关闭它？")
+            btn_close = msg.addButton("自动关闭并继续", QMessageBox.AcceptRole)
+            msg.addButton("返回", QMessageBox.RejectRole)
+            msg.exec()
+            if msg.clickedButton() == btn_close:
+                kill_program()
+                # 等进程退出，避免文件仍被占用
+                QThread.msleep(1000)
+            else:
+                self.stack.setCurrentIndex(3)
+                self.update_nav()
+                return
         # 非续装模式：目标需要管理员权限且当前不可写时，提示以管理员重跑
         if not self.resume and need_admin_for(dst) and not is_admin():
             self.prompt_admin(dst)
