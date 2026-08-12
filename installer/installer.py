@@ -799,14 +799,27 @@ def main():
         opts = {"desktop": True, "startmenu": True, "autostart": False,
                 "run": False, "keepdata": ns.keep_data}
         if need_admin_for(target) and not is_admin():
-            print("权限不足: 目标目录需要管理员权限 -> " + target)
-            print("请以管理员身份运行本安装程序(右键 -> 以管理员身份运行)。")
-            sys.exit(2)
+            # 目标需要管理员权限：自动提权重启本安装程序(保留 --silent 参数)
+            try:
+                ctypes.windll.shell32.ShellExecuteW(
+                    None, "runas", sys.executable, " ".join(sys.argv), None, 1)
+                sys.exit(0)
+            except Exception:
+                print("权限不足: 目标目录需要管理员权限 -> " + target)
+                print("请以管理员身份运行本安装程序(右键 -> 以管理员身份运行)。")
+                sys.exit(2)
         app = QCoreApplication(sys.argv)
         worker = InstallWorker(get_payload_dir(), target, opts)
 
         def on_finished(ok, msg):
             print(("OK: " if ok else "FAIL: ") + msg)
+            if ok:
+                # 安装成功后自动启动新版本
+                new_exe = os.path.join(target, APP_NAME + ".exe")
+                try:
+                    subprocess.Popen([new_exe])
+                except Exception:
+                    pass
             app.exit(0 if ok else 1)
 
         worker.finished.connect(on_finished)

@@ -5,6 +5,9 @@ import threading
 import urllib.request
 import urllib.error
 from sys import platform
+import sys
+import subprocess
+import tempfile
 
 from qfluentwidgets import (SettingCardGroup, SwitchSettingCard, HyperlinkCard,InfoBar,
                             ComboBoxSettingCard, ScrollArea, ExpandLayout, InfoBarPosition,
@@ -13,7 +16,7 @@ from qfluentwidgets import (SettingCardGroup, SwitchSettingCard, HyperlinkCard,I
 from qfluentwidgets import FluentIcon as FIF
 from PySide6.QtCore import Qt, Signal, QUrl, QStandardPaths, QLocale, QTimer
 from PySide6.QtGui import QDesktopServices, QIcon
-from PySide6.QtWidgets import QWidget, QLabel, QApplication
+from PySide6.QtWidgets import QWidget, QLabel, QApplication, QProgressDialog
 #from qframelesswindow import FramelessWindow
 
 from .custom_utils import (Dyber_RangeSettingCard, Dyber_ComboBoxSettingCard,
@@ -44,6 +47,8 @@ class SettingInterface(ScrollArea):
     scale_changed = Signal(name='scale_changed')
     lang_changed = Signal(name='lang_changed')
     checkUpdateFinished = Signal(bool, str)
+    downloadProgress = Signal(int, str)
+    downloadFinished = Signal(bool, str)
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
@@ -248,6 +253,8 @@ class SettingInterface(ScrollArea):
         )
         self.CheckUpdateCard.clicked.connect(self._onCheckUpdateClicked)
         self.checkUpdateFinished.connect(self._showUpdateResult)
+        self.downloadProgress.connect(self._onDownloadProgress)
+        self.downloadFinished.connect(self._onDownloadFinished)
 
         self.__initWidget()
 
@@ -385,15 +392,16 @@ class SettingInterface(ScrollArea):
 
     def _checkUpdate(self):
         local_version = settings.VERSION
-        success, github_version = get_latest_version()
+        success, github_version, asset_url = get_latest_release()
         if success:
             update_needed = compare_versions(local_version, github_version)
             if update_needed:
-                return True, local_version + "  " + self.tr("New version available")
+                # 提示里显示【新版本号】，而不是当前版本号
+                return True, github_version + "  " + self.tr("New version available"), asset_url
             else:
-                return False, local_version + "  " + self.tr("Already the latest")
+                return False, local_version + "  " + self.tr("Already the latest"), None
         else:
-            return False, self.tr("无法连接 GitHub：请检查网络/代理（需与浏览器一致的出口），或手动查看 ") + settings.RELEASE_URL
+            return False, self.tr("无法连接 GitHub：请检查网络/代理（需与浏览器一致的出口），或手动查看 ") + settings.RELEASE_URL, None
 
     def _onCheckUpdateClicked(self):
         # 网络请求放到后台线程，避免界面卡顿（GitHub 国内访问可能较慢）
@@ -407,12 +415,25 @@ class SettingInterface(ScrollArea):
 
         def _worker():
             try:
-                has_update, info = self._checkUpdate()
+                has_update, info, asset_url = self._checkUpdate()
             except Exception as e:
                 print('[CheckUpdate] worker exception:', e)
-                has_update, info = False, self.tr('检查更新失败：网络异常或无法访问 GitHub，请稍后重试。')
+                has_update, info, asset_url = False, self.tr('检查更新失败：网络异常或无法访问 GitHub，请稍后重试。'), None
             # 跨线程用 Signal 回主线程（QTimer 在 worker 线程无事件循环不会触发）
             self.checkUpdateFinished.emit(has_update, info)
+            if not has_update or not asset_url:
+                return
+            # 发现新版本 -> 自动下载并安装
+            try:
+                dest = os.path.join(tempfile.gettempdir(), "LiuYi_Setup_new.exe")
+                proxies = _detect_system_proxies()
+                self.downloadProgress.emit(0, self.tr("开始下载更新..."))
+                download_file(asset_url, dest, proxies,
+                              lambda p, m: self.downloadProgress.emit(p, m))
+                self.downloadFinished.emit(True, dest)
+            except Exception as e:
+                _update_log(f"auto download failed: {type(e).__name__}: {e}")
+                self.downloadFinished.emit(False, str(e))
         threading.Thread(target=_worker, daemon=True).start()
 
     def _showUpdateResult(self, has_update, info):
@@ -437,6 +458,62 @@ class SettingInterface(ScrollArea):
                 position=InfoBarPosition.TOP,
                 parent=self.window()
             )
+
+    def _onDownloadProgress(self, pct, msg):
+        if not hasattr(self, '_dl_dlg') or self._dl_dlg is None:
+            self._dl_dlg = QProgressDialog(self.tr("正在下载更新..."), "", 0, 100, self.window())
+            self._dl_dlg.setWindowTitle(self.tr("自动更新"))
+            self._dl_dlg.setAutoClose(False)
+            self._dl_dlg.setCancelButton(None)
+            self._dl_dlg.show()
+        if self._dl_dlg is not None:
+            self._dl_dlg.setValue(pct if pct > 0 else 1)
+
+    def _onDownloadFinished(self, ok, payload):
+        if getattr(self, '_dl_dlg', None) is not None:
+            try:
+                self._dl_dlg.close()
+            except Exception:
+                pass
+            self._dl_dlg = None
+        if not ok:
+            InfoBar.error(
+                title=self.tr('下载更新失败'),
+                content=self.tr('无法自动下载安装包：') + str(payload)[:120],
+                duration=5000,
+                position=InfoBarPosition.TOP,
+                parent=self.window()
+            )
+            return
+        install_dir = os.path.dirname(sys.executable)
+        InfoBar.info(
+            title=self.tr('下载完成'),
+            content=self.tr('即将自动安装更新，请稍候...'),
+            duration=1200,
+            position=InfoBarPosition.TOP,
+            parent=self.window()
+        )
+        # 延迟一点点让提示可见，然后调起静默安装并退出当前程序
+        # （退出是为了释放被锁定的 exe，交给静默安装覆盖写入）
+        QTimer.singleShot(1400, lambda: self._launch_installer(payload, install_dir))
+
+    def _launch_installer(self, payload, install_dir):
+        try:
+            subprocess.Popen([payload, '--silent', '--target', install_dir, '--keep-data'])
+        except Exception as e:
+            InfoBar.error(
+                title=self.tr('启动安装失败'),
+                content=str(e)[:120],
+                duration=5000,
+                position=InfoBarPosition.TOP,
+                parent=self.window()
+            )
+            return
+        # 退出当前程序，释放被锁定的 exe，交由静默安装接管
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
+        os._exit(0)
 
     def _AllowToasterChanged(self, isChecked):
         if isChecked:
@@ -536,6 +613,61 @@ def _http_get_json(url, proxies=None, timeout=15):
         response = urllib.request.urlopen(req, timeout=timeout)
     with response:
         return response.status, response.read()
+
+
+def get_latest_release():
+    """拉取最新 Release：返回 (success, tag_name, asset_download_url)。
+
+    asset_download_url 为安装包（LiuYi_Setup.exe）的浏览器下载地址，用于自动更新下载。
+    """
+    url = settings.RELEASE_API
+    try:
+        proxies = _detect_system_proxies()
+        status, body = _http_get_json(url, proxies=proxies, timeout=20)
+        data = json.loads(body)
+        tag = data.get('tag_name')
+        assets = data.get('assets', [])
+        asset_url = None
+        for a in assets:
+            if a.get('name', '').lower() == 'liuyi_setup.exe':
+                asset_url = a.get('browser_download_url')
+                break
+        if not asset_url:  # 兜底：取任意 .exe 资产
+            for a in assets:
+                if a.get('name', '').lower().endswith('.exe'):
+                    asset_url = a.get('browser_download_url')
+                    break
+        return True, tag, asset_url
+    except Exception as e:
+        _update_log(f"get_latest_release failed: {type(e).__name__}: {e}")
+        return False, None, None
+
+
+def download_file(url, dest, proxies, on_progress):
+    """流式下载文件并回调进度 (percent, message)。"""
+    req = urllib.request.Request(
+        url, headers={'User-Agent': f'LiuYiDesktopPet/{settings.VERSION}'})
+    if proxies:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler(proxies))
+        resp = opener.open(req, timeout=30)
+    else:
+        resp = urllib.request.urlopen(req, timeout=30)
+    total = resp.headers.get('Content-Length')
+    total = int(total) if total else 0
+    downloaded = 0
+    chunk = 8192 * 16
+    with open(dest, 'wb') as f:
+        while True:
+            buf = resp.read(chunk)
+            if not buf:
+                break
+            f.write(buf)
+            downloaded += len(buf)
+            if total:
+                on_progress(int(downloaded / total * 100), "下载中 {}%".format(int(downloaded / total * 100)))
+            else:
+                on_progress(0, "下载中 {} KB".format(downloaded // 1024))
+    on_progress(100, "下载完成")
 
 
 def get_latest_version(timeout=20):
