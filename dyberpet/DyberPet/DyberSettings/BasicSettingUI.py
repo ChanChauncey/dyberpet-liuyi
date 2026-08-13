@@ -46,7 +46,7 @@ class SettingInterface(ScrollArea):
     ontop_changed = Signal(name='ontop_changed')
     scale_changed = Signal(name='scale_changed')
     lang_changed = Signal(name='lang_changed')
-    checkUpdateFinished = Signal(bool, str, str, str)
+    checkUpdateFinished = Signal(bool, str, str, str, str)
     downloadProgress = Signal(int, str)
     downloadFinished = Signal(bool, str)
 
@@ -392,16 +392,16 @@ class SettingInterface(ScrollArea):
 
     def _checkUpdate(self):
         local_version = settings.VERSION
-        success, github_version, api_asset_url, browser_url = get_latest_release()
+        success, github_version, api_asset_url, browser_url, mirror_url = get_latest_release()
         if success:
             update_needed = compare_versions(local_version, github_version)
             if update_needed:
                 # 提示里显示【新版本号】，而不是当前版本号
-                return True, github_version + "  " + self.tr("New version available"), api_asset_url or "", browser_url or ""
+                return True, github_version + "  " + self.tr("New version available"), api_asset_url or "", browser_url or "", mirror_url or ""
             else:
-                return False, local_version + "  " + self.tr("Already the latest"), "", ""
+                return False, local_version + "  " + self.tr("Already the latest"), "", "", ""
         else:
-            return False, self.tr("无法连接 GitHub：请检查网络/代理（需与浏览器一致的出口），或手动查看 ") + settings.RELEASE_URL, "", ""
+            return False, self.tr("无法连接 GitHub：请检查网络/代理（需与浏览器一致的出口），或手动查看 ") + settings.RELEASE_URL, "", "", ""
 
     def _onCheckUpdateClicked(self):
         # 网络请求放到后台线程，避免界面卡顿（GitHub 国内访问可能较慢）
@@ -415,23 +415,24 @@ class SettingInterface(ScrollArea):
 
         def _worker():
             try:
-                has_update, info, api_asset_url, browser_url = self._checkUpdate()
+                has_update, info, api_asset_url, browser_url, mirror_url = self._checkUpdate()
             except Exception as e:
                 print('[CheckUpdate] worker exception:', e)
-                has_update, info, api_asset_url, browser_url = False, self.tr('检查更新失败：网络异常或无法访问 GitHub，请稍后重试。'), "", ""
+                has_update, info, api_asset_url, browser_url, mirror_url = False, self.tr('检查更新失败：网络异常或无法访问 GitHub，请稍后重试。'), "", "", ""
             # 跨线程用 Signal 回主线程（QTimer 在 worker 线程无事件循环不会触发）。
             # 仅回传结果，是否下载安装交由用户在确认框里决定。
-            self.checkUpdateFinished.emit(has_update, info, api_asset_url or "", browser_url or "")
+            self.checkUpdateFinished.emit(has_update, info, api_asset_url or "", browser_url or "", mirror_url or "")
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _showUpdateResult(self, has_update, info, api_asset_url, browser_url):
+    def _showUpdateResult(self, has_update, info, api_asset_url, browser_url, mirror_url):
         # 同时把结果写回卡片副标题，确保一定可见
         try:
             self.CheckUpdateCard.setContent(info)
         except Exception:
             pass
-        # 优先用 api.github.com 的 asset URL（国内通常比 github.com 更稳），失败再回退 browser_download_url
-        urls = [u for u in (api_asset_url, browser_url) if u]
+        # 优先用 api.github.com 的 asset URL（国内通常比 github.com 更稳），
+        # 其次 GitHub 浏览器下载地址，最后用国内镜像兜底
+        urls = [u for u in (api_asset_url, browser_url, mirror_url) if u]
         if has_update and urls:
             # 发现新版本 -> 弹出「是否安装」确认框，确认后才下载
             self._ask_install_update(info, urls)
@@ -477,28 +478,44 @@ class SettingInterface(ScrollArea):
             )
 
     def _startDownload(self, urls):
+        # 每次开始下载前新建取消事件，旧的（如有）先置取消避免泄漏
+        self._dl_cancel_event = threading.Event()
+
         def _dl_worker():
             try:
                 dest = os.path.join(tempfile.gettempdir(), "LiuYi_Setup_new.exe")
                 proxies = _detect_system_proxies()
                 self.downloadProgress.emit(0, self.tr("开始下载更新..."))
                 download_file(urls, dest, proxies,
-                              lambda p, m: self.downloadProgress.emit(p, m))
+                              lambda p, m: self.downloadProgress.emit(p, m),
+                              cancel_event=self._dl_cancel_event)
                 self.downloadFinished.emit(True, dest)
             except Exception as e:
                 _update_log(f"auto download failed: {type(e).__name__}: {e}")
                 self.downloadFinished.emit(False, str(e))
         threading.Thread(target=_dl_worker, daemon=True).start()
 
+    def _cancelDownload(self):
+        if getattr(self, '_dl_cancel_event', None) is not None:
+            self._dl_cancel_event.set()
+        if getattr(self, '_dl_dlg', None) is not None:
+            try:
+                self._dl_dlg.close()
+            except Exception:
+                pass
+            self._dl_dlg = None
+
     def _onDownloadProgress(self, pct, msg):
         if not hasattr(self, '_dl_dlg') or self._dl_dlg is None:
-            self._dl_dlg = QProgressDialog(self.tr("正在下载更新..."), "", 0, 100, self.window())
+            self._dl_dlg = QProgressDialog(self.tr("正在下载更新..."), self.tr("取消"), 0, 100, self.window())
             self._dl_dlg.setWindowTitle(self.tr("自动更新"))
             self._dl_dlg.setAutoClose(False)
-            self._dl_dlg.setCancelButton(None)
+            self._dl_dlg.setMinimumDuration(0)
+            self._dl_dlg.canceled.connect(self._cancelDownload)
             self._dl_dlg.show()
         if self._dl_dlg is not None:
             self._dl_dlg.setValue(pct if pct > 0 else 1)
+            self._dl_dlg.setLabelText(msg)
 
     def _onDownloadFinished(self, ok, payload):
         if getattr(self, '_dl_dlg', None) is not None:
@@ -508,10 +525,27 @@ class SettingInterface(ScrollArea):
                 pass
             self._dl_dlg = None
         if not ok:
+            err = str(payload)
+            # 用户主动取消不弹错误提示
+            if '取消' in err or 'InterruptedError' in err or 'cancel' in err.lower():
+                InfoBar.info(
+                    title=self.tr('已取消'),
+                    content=self.tr('更新下载已取消，你可以稍后再试。'),
+                    duration=3000,
+                    position=InfoBarPosition.TOP,
+                    parent=self.window()
+                )
+                return
+            # 卡住/超时类错误给出更友好的提示
+            hint = self.tr('网络较慢或 GitHub 被限速，建议开启代理或前往 Releases 手动下载。')
+            if '停滞' in err or 'Timeout' in err or 'time' in err.lower():
+                content = err[:80] + "\n" + hint
+            else:
+                content = self.tr('无法自动下载安装包：') + err[:120]
             InfoBar.error(
                 title=self.tr('下载更新失败'),
-                content=self.tr('无法自动下载安装包：') + str(payload)[:120],
-                duration=5000,
+                content=content,
+                duration=8000,
                 position=InfoBarPosition.TOP,
                 parent=self.window()
             )
@@ -658,10 +692,11 @@ def _http_get_json(url, proxies=None, timeout=15):
 
 
 def get_latest_release():
-    """拉取最新 Release：返回 (success, tag_name, api_asset_url, browser_download_url)。
+    """拉取最新 Release：返回 (success, tag_name, api_asset_url, browser_download_url, mirror_url)。
 
     - api_asset_url: 通过 api.github.com 获取 asset 的下载 URL，在国内通常比 github.com 更稳。
-    - browser_download_url: 浏览器下载地址，作为兜底。
+    - browser_download_url: 浏览器下载地址。
+    - mirror_url: ghproxy 国内镜像兜底。
     """
     url = settings.RELEASE_API
     try:
@@ -683,25 +718,33 @@ def get_latest_release():
                     api_asset_url = a.get('url')
                     browser_url = a.get('browser_download_url')
                     break
-        return True, tag, api_asset_url, browser_url
+        mirror_url = None
+        if tag and browser_url:
+            mirror_url = f"https://gh-proxy.com/https://github.com/ChanChauncey/dyberpet-liuyi/releases/download/{tag}/LiuYi_Setup.exe"
+        return True, tag, api_asset_url, browser_url, mirror_url
     except Exception as e:
         _update_log(f"get_latest_release failed: {type(e).__name__}: {e}")
-        return False, None, None, None
+        return False, None, None, None, None
 
 
-def download_file(urls, dest, proxies, on_progress):
+def download_file(urls, dest, proxies, on_progress, cancel_event=None):
     """流式下载文件并回调进度 (percent, message)。
 
     urls 可以是单个 URL 字符串或 URL 列表；依次尝试，每个 URL 失败自动重试 2 次。
-    优先使用 api.github.com 的 asset URL（带 Accept: application/octet-stream 头），
-    它在国内通常比 github.com 的 browser_download_url 更稳。
+    支持取消（cancel_event）和低速超时，避免网络被限速时卡死。
     """
+    import time
     if isinstance(urls, str):
         urls = [urls]
     if not urls:
         raise ValueError("no download URLs provided")
 
     last_err = None
+    # 连接/单次读取超时：30s 足够，过长会让「卡住」感知变差
+    IO_TIMEOUT = 30
+    # 低速判定：如果 20s 内没有读到任何新数据，视为卡死
+    STALL_TIMEOUT = 20
+
     for url in urls:
         for attempt in range(3):
             try:
@@ -712,31 +755,48 @@ def download_file(urls, dest, proxies, on_progress):
                 req = urllib.request.Request(url, headers=headers)
                 if proxies:
                     opener = urllib.request.build_opener(urllib.request.ProxyHandler(proxies))
-                    resp = opener.open(req, timeout=60)
+                    resp = opener.open(req, timeout=IO_TIMEOUT)
                 else:
-                    resp = urllib.request.urlopen(req, timeout=60)
+                    resp = urllib.request.urlopen(req, timeout=IO_TIMEOUT)
                 total = resp.headers.get('Content-Length')
                 total = int(total) if total else 0
                 downloaded = 0
-                chunk = 8192 * 16
+                chunk = 8192 * 4  # 32KB，让进度更新更频繁，也更容易检测低速
+                last_data_time = time.time()
                 with open(dest, 'wb') as f:
                     while True:
-                        buf = resp.read(chunk)
+                        if cancel_event and cancel_event.is_set():
+                            raise InterruptedError("用户取消下载")
+                        # 低速保护：若长时间未读到数据，主动放弃当前连接重试
+                        if time.time() - last_data_time > STALL_TIMEOUT:
+                            raise TimeoutError(f"下载停滞超过 {STALL_TIMEOUT}s，尝试切换线路")
+                        try:
+                            buf = resp.read(chunk)
+                        except TimeoutError:
+                            raise
+                        except Exception:
+                            # 某些被墙/限速环境 read 会抛 IncompleteRead 等，统一按失败重试
+                            raise
                         if not buf:
                             break
                         f.write(buf)
                         downloaded += len(buf)
+                        last_data_time = time.time()
                         if total:
-                            on_progress(int(downloaded / total * 100), "下载中 {}%".format(int(downloaded / total * 100)))
+                            pct = int(downloaded / total * 100)
+                            on_progress(pct, "下载中 {}% ({:.1f} MB / {:.1f} MB)".format(
+                                pct, downloaded / 1024 / 1024, total / 1024 / 1024))
                         else:
-                            on_progress(0, "下载中 {} KB".format(downloaded // 1024))
+                            on_progress(0, "下载中 {:.1f} MB".format(downloaded / 1024 / 1024))
+                # 简单校验：若服务端给了 Content-Length，下载大小必须一致
+                if total and downloaded != total:
+                    raise IOError(f"下载不完整：{downloaded}/{total}")
                 on_progress(100, "下载完成")
                 return
             except Exception as e:
                 last_err = e
-                _update_log(f"download_file attempt {attempt+1}/{3} for {url} failed: {type(e).__name__}: {e}")
+                _update_log(f"download_file attempt {attempt+1}/3 for {url} failed: {type(e).__name__}: {e}")
                 if attempt < 2:
-                    import time
                     time.sleep(2 ** attempt)
     raise last_err if last_err else RuntimeError("all download attempts failed")
 
