@@ -46,7 +46,7 @@ class SettingInterface(ScrollArea):
     ontop_changed = Signal(name='ontop_changed')
     scale_changed = Signal(name='scale_changed')
     lang_changed = Signal(name='lang_changed')
-    checkUpdateFinished = Signal(bool, str, str)
+    checkUpdateFinished = Signal(bool, str, str, str)
     downloadProgress = Signal(int, str)
     downloadFinished = Signal(bool, str)
 
@@ -392,16 +392,16 @@ class SettingInterface(ScrollArea):
 
     def _checkUpdate(self):
         local_version = settings.VERSION
-        success, github_version, asset_url = get_latest_release()
+        success, github_version, api_asset_url, browser_url = get_latest_release()
         if success:
             update_needed = compare_versions(local_version, github_version)
             if update_needed:
                 # 提示里显示【新版本号】，而不是当前版本号
-                return True, github_version + "  " + self.tr("New version available"), asset_url
+                return True, github_version + "  " + self.tr("New version available"), api_asset_url or "", browser_url or ""
             else:
-                return False, local_version + "  " + self.tr("Already the latest"), None
+                return False, local_version + "  " + self.tr("Already the latest"), "", ""
         else:
-            return False, self.tr("无法连接 GitHub：请检查网络/代理（需与浏览器一致的出口），或手动查看 ") + settings.RELEASE_URL, None
+            return False, self.tr("无法连接 GitHub：请检查网络/代理（需与浏览器一致的出口），或手动查看 ") + settings.RELEASE_URL, "", ""
 
     def _onCheckUpdateClicked(self):
         # 网络请求放到后台线程，避免界面卡顿（GitHub 国内访问可能较慢）
@@ -415,25 +415,27 @@ class SettingInterface(ScrollArea):
 
         def _worker():
             try:
-                has_update, info, asset_url = self._checkUpdate()
+                has_update, info, api_asset_url, browser_url = self._checkUpdate()
             except Exception as e:
                 print('[CheckUpdate] worker exception:', e)
-                has_update, info, asset_url = False, self.tr('检查更新失败：网络异常或无法访问 GitHub，请稍后重试。'), None
+                has_update, info, api_asset_url, browser_url = False, self.tr('检查更新失败：网络异常或无法访问 GitHub，请稍后重试。'), "", ""
             # 跨线程用 Signal 回主线程（QTimer 在 worker 线程无事件循环不会触发）。
             # 仅回传结果，是否下载安装交由用户在确认框里决定。
-            self.checkUpdateFinished.emit(has_update, info, asset_url or "")
+            self.checkUpdateFinished.emit(has_update, info, api_asset_url or "", browser_url or "")
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _showUpdateResult(self, has_update, info, asset_url):
+    def _showUpdateResult(self, has_update, info, api_asset_url, browser_url):
         # 同时把结果写回卡片副标题，确保一定可见
         try:
             self.CheckUpdateCard.setContent(info)
         except Exception:
             pass
-        if has_update and asset_url:
+        # 优先用 api.github.com 的 asset URL（国内通常比 github.com 更稳），失败再回退 browser_download_url
+        urls = [u for u in (api_asset_url, browser_url) if u]
+        if has_update and urls:
             # 发现新版本 -> 弹出「是否安装」确认框，确认后才下载
-            self._ask_install_update(info, asset_url)
-        elif has_update and not asset_url:
+            self._ask_install_update(info, urls)
+        elif has_update and not urls:
             InfoBar.warning(
                 title=self.tr('发现新版本'),
                 content=self.tr('已检测到新版本，但未获取到安装包下载地址，请前往项目主页手动更新。'),
@@ -450,7 +452,7 @@ class SettingInterface(ScrollArea):
                 parent=self.window()
             )
 
-    def _ask_install_update(self, info, asset_url):
+    def _ask_install_update(self, info, urls):
         # 从 info 里取出版本号（形如 "v1.0.2  New version available"）
         ver = info.split()[0] if info else ""
         box = QMessageBox(self.window())
@@ -464,7 +466,7 @@ class SettingInterface(ScrollArea):
         box.setDefaultButton(QMessageBox.Yes)
         ret = box.exec()
         if ret == QMessageBox.Yes:
-            self._startDownload(asset_url)
+            self._startDownload(urls)
         else:
             InfoBar.info(
                 title=self.tr('检查更新'),
@@ -474,13 +476,13 @@ class SettingInterface(ScrollArea):
                 parent=self.window()
             )
 
-    def _startDownload(self, asset_url):
+    def _startDownload(self, urls):
         def _dl_worker():
             try:
                 dest = os.path.join(tempfile.gettempdir(), "LiuYi_Setup_new.exe")
                 proxies = _detect_system_proxies()
                 self.downloadProgress.emit(0, self.tr("开始下载更新..."))
-                download_file(asset_url, dest, proxies,
+                download_file(urls, dest, proxies,
                               lambda p, m: self.downloadProgress.emit(p, m))
                 self.downloadFinished.emit(True, dest)
             except Exception as e:
@@ -570,22 +572,33 @@ class SettingInterface(ScrollArea):
 
 
 def _detect_system_proxies():
-    """检测系统代理。优先用 urllib.request.getproxies()（Windows 下读注册表），失败再手动读注册表。"""
-    proxies = {}
+    """检测系统代理。优先用 urllib.request.getproxies()（Windows 下读注册表），再读环境变量，最后读注册表。"""
+    # 1. Python 内置跨平台代理检测，Windows 下会读 IE/系统代理设置
     try:
-        # Python 内置跨平台代理检测，Windows 下会读 IE/系统代理设置
         proxies = urllib.request.getproxies()
+        if proxies:
+            result = {}
+            for k in ('http', 'https'):
+                if k in proxies and proxies[k]:
+                    result[k] = proxies[k]
+            if result:
+                return result
     except Exception:
-        proxies = {}
-    if proxies:
+        pass
+
+    # 2. 环境变量兜底（兼容用户通过脚本/终端设置代理的场景）
+    try:
         result = {}
         for k in ('http', 'https'):
-            if k in proxies and proxies[k]:
-                result[k] = proxies[k]
+            v = os.environ.get(k + '_proxy') or os.environ.get(k.upper() + '_PROXY')
+            if v:
+                result[k] = v
         if result:
             return result
+    except Exception:
+        pass
 
-    # 兜底：手动读注册表（兼容 getproxies 未覆盖到的情况）
+    # 3. 最后兜底：手动读注册表
     try:
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
@@ -645,9 +658,10 @@ def _http_get_json(url, proxies=None, timeout=15):
 
 
 def get_latest_release():
-    """拉取最新 Release：返回 (success, tag_name, asset_download_url)。
+    """拉取最新 Release：返回 (success, tag_name, api_asset_url, browser_download_url)。
 
-    asset_download_url 为安装包（LiuYi_Setup.exe）的浏览器下载地址，用于自动更新下载。
+    - api_asset_url: 通过 api.github.com 获取 asset 的下载 URL，在国内通常比 github.com 更稳。
+    - browser_download_url: 浏览器下载地址，作为兜底。
     """
     url = settings.RELEASE_API
     try:
@@ -656,47 +670,75 @@ def get_latest_release():
         data = json.loads(body)
         tag = data.get('tag_name')
         assets = data.get('assets', [])
-        asset_url = None
+        api_asset_url = None
+        browser_url = None
         for a in assets:
             if a.get('name', '').lower() == 'liuyi_setup.exe':
-                asset_url = a.get('browser_download_url')
+                api_asset_url = a.get('url')
+                browser_url = a.get('browser_download_url')
                 break
-        if not asset_url:  # 兜底：取任意 .exe 资产
+        if not browser_url:  # 兜底：取任意 .exe 资产
             for a in assets:
                 if a.get('name', '').lower().endswith('.exe'):
-                    asset_url = a.get('browser_download_url')
+                    api_asset_url = a.get('url')
+                    browser_url = a.get('browser_download_url')
                     break
-        return True, tag, asset_url
+        return True, tag, api_asset_url, browser_url
     except Exception as e:
         _update_log(f"get_latest_release failed: {type(e).__name__}: {e}")
-        return False, None, None
+        return False, None, None, None
 
 
-def download_file(url, dest, proxies, on_progress):
-    """流式下载文件并回调进度 (percent, message)。"""
-    req = urllib.request.Request(
-        url, headers={'User-Agent': f'LiuYiDesktopPet/{settings.VERSION}'})
-    if proxies:
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler(proxies))
-        resp = opener.open(req, timeout=30)
-    else:
-        resp = urllib.request.urlopen(req, timeout=30)
-    total = resp.headers.get('Content-Length')
-    total = int(total) if total else 0
-    downloaded = 0
-    chunk = 8192 * 16
-    with open(dest, 'wb') as f:
-        while True:
-            buf = resp.read(chunk)
-            if not buf:
-                break
-            f.write(buf)
-            downloaded += len(buf)
-            if total:
-                on_progress(int(downloaded / total * 100), "下载中 {}%".format(int(downloaded / total * 100)))
-            else:
-                on_progress(0, "下载中 {} KB".format(downloaded // 1024))
-    on_progress(100, "下载完成")
+def download_file(urls, dest, proxies, on_progress):
+    """流式下载文件并回调进度 (percent, message)。
+
+    urls 可以是单个 URL 字符串或 URL 列表；依次尝试，每个 URL 失败自动重试 2 次。
+    优先使用 api.github.com 的 asset URL（带 Accept: application/octet-stream 头），
+    它在国内通常比 github.com 的 browser_download_url 更稳。
+    """
+    if isinstance(urls, str):
+        urls = [urls]
+    if not urls:
+        raise ValueError("no download URLs provided")
+
+    last_err = None
+    for url in urls:
+        for attempt in range(3):
+            try:
+                headers = {'User-Agent': f'LiuYiDesktopPet/{settings.VERSION}'}
+                # api.github.com 的 asset URL 必须加这个头才会 302 到真实下载地址
+                if 'api.github.com' in url:
+                    headers['Accept'] = 'application/octet-stream'
+                req = urllib.request.Request(url, headers=headers)
+                if proxies:
+                    opener = urllib.request.build_opener(urllib.request.ProxyHandler(proxies))
+                    resp = opener.open(req, timeout=60)
+                else:
+                    resp = urllib.request.urlopen(req, timeout=60)
+                total = resp.headers.get('Content-Length')
+                total = int(total) if total else 0
+                downloaded = 0
+                chunk = 8192 * 16
+                with open(dest, 'wb') as f:
+                    while True:
+                        buf = resp.read(chunk)
+                        if not buf:
+                            break
+                        f.write(buf)
+                        downloaded += len(buf)
+                        if total:
+                            on_progress(int(downloaded / total * 100), "下载中 {}%".format(int(downloaded / total * 100)))
+                        else:
+                            on_progress(0, "下载中 {} KB".format(downloaded // 1024))
+                on_progress(100, "下载完成")
+                return
+            except Exception as e:
+                last_err = e
+                _update_log(f"download_file attempt {attempt+1}/{3} for {url} failed: {type(e).__name__}: {e}")
+                if attempt < 2:
+                    import time
+                    time.sleep(2 ** attempt)
+    raise last_err if last_err else RuntimeError("all download attempts failed")
 
 
 def get_latest_version(timeout=20):
