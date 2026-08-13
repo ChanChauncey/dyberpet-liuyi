@@ -16,7 +16,7 @@ from qfluentwidgets import (SettingCardGroup, SwitchSettingCard, HyperlinkCard,I
 from qfluentwidgets import FluentIcon as FIF
 from PySide6.QtCore import Qt, Signal, QUrl, QStandardPaths, QLocale, QTimer
 from PySide6.QtGui import QDesktopServices, QIcon
-from PySide6.QtWidgets import QWidget, QLabel, QApplication, QProgressDialog
+from PySide6.QtWidgets import QWidget, QLabel, QApplication, QProgressDialog, QMessageBox
 #from qframelesswindow import FramelessWindow
 
 from .custom_utils import (Dyber_RangeSettingCard, Dyber_ComboBoxSettingCard,
@@ -46,7 +46,7 @@ class SettingInterface(ScrollArea):
     ontop_changed = Signal(name='ontop_changed')
     scale_changed = Signal(name='scale_changed')
     lang_changed = Signal(name='lang_changed')
-    checkUpdateFinished = Signal(bool, str)
+    checkUpdateFinished = Signal(bool, str, str)
     downloadProgress = Signal(int, str)
     downloadFinished = Signal(bool, str)
 
@@ -419,33 +419,24 @@ class SettingInterface(ScrollArea):
             except Exception as e:
                 print('[CheckUpdate] worker exception:', e)
                 has_update, info, asset_url = False, self.tr('检查更新失败：网络异常或无法访问 GitHub，请稍后重试。'), None
-            # 跨线程用 Signal 回主线程（QTimer 在 worker 线程无事件循环不会触发）
-            self.checkUpdateFinished.emit(has_update, info)
-            if not has_update or not asset_url:
-                return
-            # 发现新版本 -> 自动下载并安装
-            try:
-                dest = os.path.join(tempfile.gettempdir(), "LiuYi_Setup_new.exe")
-                proxies = _detect_system_proxies()
-                self.downloadProgress.emit(0, self.tr("开始下载更新..."))
-                download_file(asset_url, dest, proxies,
-                              lambda p, m: self.downloadProgress.emit(p, m))
-                self.downloadFinished.emit(True, dest)
-            except Exception as e:
-                _update_log(f"auto download failed: {type(e).__name__}: {e}")
-                self.downloadFinished.emit(False, str(e))
+            # 跨线程用 Signal 回主线程（QTimer 在 worker 线程无事件循环不会触发）。
+            # 仅回传结果，是否下载安装交由用户在确认框里决定。
+            self.checkUpdateFinished.emit(has_update, info, asset_url or "")
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _showUpdateResult(self, has_update, info):
+    def _showUpdateResult(self, has_update, info, asset_url):
         # 同时把结果写回卡片副标题，确保一定可见
         try:
             self.CheckUpdateCard.setContent(info)
         except Exception:
             pass
-        if has_update:
-            InfoBar.success(
+        if has_update and asset_url:
+            # 发现新版本 -> 弹出「是否安装」确认框，确认后才下载
+            self._ask_install_update(info, asset_url)
+        elif has_update and not asset_url:
+            InfoBar.warning(
                 title=self.tr('发现新版本'),
-                content=info,
+                content=self.tr('已检测到新版本，但未获取到安装包下载地址，请前往项目主页手动更新。'),
                 duration=5000,
                 position=InfoBarPosition.TOP,
                 parent=self.window()
@@ -458,6 +449,44 @@ class SettingInterface(ScrollArea):
                 position=InfoBarPosition.TOP,
                 parent=self.window()
             )
+
+    def _ask_install_update(self, info, asset_url):
+        # 从 info 里取出版本号（形如 "v1.0.2  New version available"）
+        ver = info.split()[0] if info else ""
+        box = QMessageBox(self.window())
+        box.setIcon(QMessageBox.Question)
+        box.setWindowTitle(self.tr('发现新版本'))
+        box.setText(self.tr('发现新版本 {ver}，是否下载并安装？').format(ver=ver))
+        box.setInformativeText(self.tr('安装包将自动下载并静默安装，完成后会自动重启，你的存档数据会保留。'))
+        box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        box.setButtonText(QMessageBox.Yes, self.tr('安装'))
+        box.setButtonText(QMessageBox.No, self.tr('取消'))
+        box.setDefaultButton(QMessageBox.Yes)
+        ret = box.exec()
+        if ret == QMessageBox.Yes:
+            self._startDownload(asset_url)
+        else:
+            InfoBar.info(
+                title=self.tr('检查更新'),
+                content=self.tr('已取消更新，你可以稍后在「关于」中再次检查更新。'),
+                duration=3000,
+                position=InfoBarPosition.TOP,
+                parent=self.window()
+            )
+
+    def _startDownload(self, asset_url):
+        def _dl_worker():
+            try:
+                dest = os.path.join(tempfile.gettempdir(), "LiuYi_Setup_new.exe")
+                proxies = _detect_system_proxies()
+                self.downloadProgress.emit(0, self.tr("开始下载更新..."))
+                download_file(asset_url, dest, proxies,
+                              lambda p, m: self.downloadProgress.emit(p, m))
+                self.downloadFinished.emit(True, dest)
+            except Exception as e:
+                _update_log(f"auto download failed: {type(e).__name__}: {e}")
+                self.downloadFinished.emit(False, str(e))
+        threading.Thread(target=_dl_worker, daemon=True).start()
 
     def _onDownloadProgress(self, pct, msg):
         if not hasattr(self, '_dl_dlg') or self._dl_dlg is None:
