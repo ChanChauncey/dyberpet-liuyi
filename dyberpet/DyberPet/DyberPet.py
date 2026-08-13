@@ -503,6 +503,7 @@ class PetWidget(QWidget):
     single_pomo_done = Signal(name="single_pomo_done")
 
     refresh_acts = Signal(name='refresh_acts')
+    updateReminderSignal = Signal(str, name='updateReminderSignal')
 
     def __init__(self, parent=None, curr_pet_name=None, pets=(), screens=[]):
         """
@@ -598,32 +599,73 @@ class PetWidget(QWidget):
         self._setup_compensate()
 
         # 启动后自动检测新版本（延迟4s，避免影响启动；网络请求在后台线程）
+        self.updateReminderSignal.connect(self._showUpdateReminder)
         QTimer.singleShot(4000, self._autoCheckUpdate)
 
     def _autoCheckUpdate(self):
-        """启动后自动检测 GitHub Release 是否有新版本，结果均弹窗反馈（不阻塞启动）"""
+        """启动后自动检测 GitHub Release 是否有新版本；发现则弹窗提醒（不阻塞启动）。
+
+        结果通过 Qt 信号跨线程回主线程，不能用 QTimer.singleShot 从工作线程直接弹 UI
+        （工作线程无事件循环，singleShot 不会触发，会导致提醒永不出现）。
+        """
         def _worker():
             try:
-                from DyberPet.DyberSettings.BasicSettingUI import get_latest_version, compare_versions
+                from DyberPet.DyberSettings.BasicSettingUI import (
+                    get_latest_version, compare_versions)
                 success, github_version = get_latest_version()
-                if success:
+                if success and github_version:
                     if compare_versions(settings.VERSION, github_version):
-                        QTimer.singleShot(0, lambda: InfoBar.success(
-                            title='发现新版本',
-                            content='最新版本 ' + github_version + ' 已发布，到「设置 → 关于」下载',
-                            duration=6000,
-                            position=InfoBarPosition.TOP,
-                            parent=self))
+                        # 跨线程用 Signal 回主线程弹窗（自动排队到主线程事件循环）
+                        self.updateReminderSignal.emit(github_version)
+                # 已是最新或检测失败：保持静默，不打扰用户
+            except Exception as e:
+                print('[AutoCheckUpdate]', repr(e))
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _showUpdateReminder(self, github_version):
+        """（主线程）弹出醒目「发现新版本」提醒框。"""
+        try:
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Information)
+            box.setWindowTitle('发现新版本')
+            box.setText('检测到新版本 %s，是否前往更新？' % github_version)
+            box.setInformativeText(
+                '安装包将自动下载并静默安装，完成后会自动重启，你的存档数据会保留。')
+            box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            box.setButtonText(QMessageBox.Yes, '前往更新')
+            box.setButtonText(QMessageBox.No, '稍后')
+            box.setDefaultButton(QMessageBox.Yes)
+            if box.exec() == QMessageBox.Yes:
+                self._open_update_flow()
+        except Exception as e:
+            print('[AutoCheckUpdate] reminder failed:', repr(e))
+
+    def _open_update_flow(self):
+        """打开设置面板并触发「检查更新」，复用已有的「确认后下载安装」流程。
+        若面板不可用则退而求其次打开发布页。"""
+        try:
+            app = QApplication.instance()
+            if app is None:
+                raise RuntimeError('no QApplication')
+            # 打开（或聚焦）设置面板
+            self.show_controlPanel.emit()
+            # 等面板展示后再触发检查更新，弹出「是否下载并安装」确认框
+            def _trigger():
+                try:
+                    if getattr(app, 'conp', None) is not None:
+                        app.conp.settingInterface._onCheckUpdateClicked()
                     else:
-                        QTimer.singleShot(0, lambda: InfoBar.info(
-                            title='已是最新版本',
-                            content='当前 ' + settings.VERSION + ' 无需更新',
-                            duration=4000,
-                            position=InfoBarPosition.TOP,
-                            parent=self))
+                        webbrowser.open(settings.RELEASE_URL)
+                except Exception as e:
+                    print('[AutoCheckUpdate] trigger check failed:', repr(e))
+                    webbrowser.open(settings.RELEASE_URL)
+            QTimer.singleShot(400, _trigger)
+        except Exception as e:
+            print('[AutoCheckUpdate] open update flow failed:', repr(e))
+            try:
+                webbrowser.open(settings.RELEASE_URL)
             except Exception:
                 pass
-        threading.Thread(target=_worker, daemon=True).start()
 
     def _setup_compensate(self):
         self._stop_compensate()
