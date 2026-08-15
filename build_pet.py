@@ -7,6 +7,7 @@ import nt
 import os
 import sys
 import shutil
+import zipfile
 
 _real_unlink = nt.unlink
 _real_rmdir = nt.rmdir
@@ -123,3 +124,25 @@ exe = os.path.join(DST, "六一桌宠.exe")
 print("payload exe exists:", os.path.exists(exe), round(os.path.getsize(exe) / 1e6, 1), "MB")
 print("payload top-level count:", len(os.listdir(DST)))
 print("===== payload assembled at:", DST, "=====")
+
+print("===== STEP 3: generate incremental source patch (DyberPet_source.zip) =====")
+# 增量更新只下发应用源码（约几 MB），自动更新覆盖安装目录的 DyberPet/ 即可，
+# 无需下载 245MB 完整安装包。排除 __pycache__ 与 .pyc。
+_SRC = r"C:\DyberPet\dyberpet\DyberPet"
+_OUT = r"C:\DyberPet\DyberPet_source.zip"
+if os.path.isfile(_OUT):
+    try:
+        _real_unlink(_OUT)
+    except Exception:
+        pass
+with zipfile.ZipFile(_OUT, 'w', zipfile.ZIP_DEFLATED) as z:
+    for root, dirs, files in os.walk(_SRC):
+        if '__pycache__' in dirs:
+            dirs.remove('__pycache__')
+        for f in files:
+            if f.endswith('.pyc') or f == '__pycache__.DELETED':
+                continue
+            full = os.path.join(root, f)
+            rel = os.path.relpath(full, os.path.dirname(_SRC))  # -> DyberPet/...
+            z.write(full, rel)
+print("source patch ->", _OUT, round(os.path.getsize(_OUT) / 1e6, 2), "MB")

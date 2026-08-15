@@ -1,5 +1,24 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
+
+# ---- 优先加载安装目录下的松散 DyberPet 源码（增量更新的覆盖目标）----
+# 把自定义查找器插到 PyInstaller 冻结导入器之前；若安装目录没有松散 DyberPet
+# 文件夹（老版本/未覆盖），find_spec 返回 None，自动回退到冻结版，不会崩。
+if getattr(sys, 'frozen', False):
+    try:
+        _install_dir = os.path.dirname(sys.executable)
+        _loose_dyberpet = os.path.join(_install_dir, 'DyberPet')
+        if os.path.isdir(_loose_dyberpet):
+            from importlib.machinery import FileFinder, SourceFileLoader, SourcelessFileLoader
+            class _LooseDyberPetFinder:
+                def find_spec(self, fullname, target=None, path=None):
+                    if fullname != 'DyberPet' and not fullname.startswith('DyberPet.'):
+                        return None
+                    return FileFinder(_loose_dyberpet, SourceFileLoader, SourcelessFileLoader).find_spec(fullname, target=target, path=path)
+            sys.meta_path.insert(0, _LooseDyberPetFinder())
+    except Exception:
+        pass
+
 from sys import platform
 import ctypes
 from tendo import singleton
@@ -211,7 +230,8 @@ if __name__ == '__main__':
 
     # Avoid multiple process
     try:
-        if not os.environ.get('DYBERPET_TEST_NO_SINGLETON'):
+        # 自重启更新时带上 DYBERPET_RELAUNCH，跳过单例锁（旧进程即将退出）
+        if not os.environ.get('DYBERPET_TEST_NO_SINGLETON') and not os.environ.get('DYBERPET_RELAUNCH'):
             me = singleton.SingleInstance()
     except:
         sys.exit()

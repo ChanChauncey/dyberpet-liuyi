@@ -1,6 +1,8 @@
 # coding:utf-8
 import os
 import json
+import zipfile
+import shutil
 import threading
 import urllib.request
 import urllib.error
@@ -46,9 +48,10 @@ class SettingInterface(ScrollArea):
     ontop_changed = Signal(name='ontop_changed')
     scale_changed = Signal(name='scale_changed')
     lang_changed = Signal(name='lang_changed')
-    checkUpdateFinished = Signal(bool, str, str, str, str)
+    checkUpdateFinished = Signal(bool, str, object, object)  # (has_update, info, full_urls, src_urls)
     downloadProgress = Signal(int, str)
     downloadFinished = Signal(bool, str)
+    restartRequested = Signal()  # 增量更新应用完成后请求主线程重启
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
@@ -255,6 +258,7 @@ class SettingInterface(ScrollArea):
         self.checkUpdateFinished.connect(self._showUpdateResult)
         self.downloadProgress.connect(self._onDownloadProgress)
         self.downloadFinished.connect(self._onDownloadFinished)
+        self.restartRequested.connect(self._onRestartRequested)
 
         self.__initWidget()
 
@@ -392,16 +396,16 @@ class SettingInterface(ScrollArea):
 
     def _checkUpdate(self):
         local_version = settings.VERSION
-        success, github_version, api_asset_url, browser_url, mirror_url = get_latest_release()
+        success, github_version, full_urls, src_urls = get_latest_release()
         if success:
             update_needed = compare_versions(local_version, github_version)
             if update_needed:
                 # 提示里显示【新版本号】，而不是当前版本号
-                return True, github_version + "  " + self.tr("New version available"), api_asset_url or "", browser_url or "", mirror_url or ""
+                return True, github_version + "  " + self.tr("New version available"), full_urls, src_urls
             else:
-                return False, local_version + "  " + self.tr("Already the latest"), "", "", ""
+                return False, local_version + "  " + self.tr("Already the latest"), [], []
         else:
-            return False, self.tr("无法连接 GitHub：请检查网络/代理（需与浏览器一致的出口），或手动查看 ") + settings.RELEASE_URL, "", "", ""
+            return False, self.tr("无法连接 GitHub：请检查网络/代理（需与浏览器一致的出口），或手动查看 ") + settings.RELEASE_URL, [], []
 
     def _onCheckUpdateClicked(self):
         # 网络请求放到后台线程，避免界面卡顿（GitHub 国内访问可能较慢）
@@ -415,28 +419,25 @@ class SettingInterface(ScrollArea):
 
         def _worker():
             try:
-                has_update, info, api_asset_url, browser_url, mirror_url = self._checkUpdate()
+                has_update, info, full_urls, src_urls = self._checkUpdate()
             except Exception as e:
                 print('[CheckUpdate] worker exception:', e)
-                has_update, info, api_asset_url, browser_url, mirror_url = False, self.tr('检查更新失败：网络异常或无法访问 GitHub，请稍后重试。'), "", "", ""
+                has_update, info, full_urls, src_urls = False, self.tr('检查更新失败：网络异常或无法访问 GitHub，请稍后重试。'), [], []
             # 跨线程用 Signal 回主线程（QTimer 在 worker 线程无事件循环不会触发）。
             # 仅回传结果，是否下载安装交由用户在确认框里决定。
-            self.checkUpdateFinished.emit(has_update, info, api_asset_url or "", browser_url or "", mirror_url or "")
+            self.checkUpdateFinished.emit(has_update, info, full_urls, src_urls)
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _showUpdateResult(self, has_update, info, api_asset_url, browser_url, mirror_url):
+    def _showUpdateResult(self, has_update, info, full_urls, src_urls):
         # 同时把结果写回卡片副标题，确保一定可见
         try:
             self.CheckUpdateCard.setContent(info)
         except Exception:
             pass
-        # 优先用 api.github.com 的 asset URL（国内通常比 github.com 更稳），
-        # 其次 GitHub 浏览器下载地址，最后用国内镜像兜底
-        urls = [u for u in (api_asset_url, browser_url, mirror_url) if u]
-        if has_update and urls:
+        if has_update and (full_urls or src_urls):
             # 发现新版本 -> 弹出「是否安装」确认框，确认后才下载
-            self._ask_install_update(info, urls)
-        elif has_update and not urls:
+            self._ask_install_update(info, src_urls, full_urls)
+        elif has_update:
             InfoBar.warning(
                 title=self.tr('发现新版本'),
                 content=self.tr('已检测到新版本，但未获取到安装包下载地址，请前往项目主页手动更新。'),
@@ -453,21 +454,24 @@ class SettingInterface(ScrollArea):
                 parent=self.window()
             )
 
-    def _ask_install_update(self, info, urls):
+    def _ask_install_update(self, info, src_urls, full_urls):
         # 从 info 里取出版本号（形如 "v1.0.2  New version available"）
         ver = info.split()[0] if info else ""
         box = QMessageBox(self.window())
         box.setIcon(QMessageBox.Question)
         box.setWindowTitle(self.tr('发现新版本'))
         box.setText(self.tr('发现新版本 {ver}，是否下载并安装？').format(ver=ver))
-        box.setInformativeText(self.tr('安装包将自动下载并静默安装，完成后会自动重启，你的存档数据会保留。'))
+        if src_urls:
+            box.setInformativeText(self.tr('将优先下载增量更新包（仅应用源码，约几 MB）并自动重启；若失败则回退到完整安装包。'))
+        else:
+            box.setInformativeText(self.tr('安装包将自动下载并静默安装，完成后会自动重启，你的存档数据会保留。'))
         box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         box.setButtonText(QMessageBox.Yes, self.tr('安装'))
         box.setButtonText(QMessageBox.No, self.tr('取消'))
         box.setDefaultButton(QMessageBox.Yes)
         ret = box.exec()
         if ret == QMessageBox.Yes:
-            self._startDownload(urls)
+            self._startUpdate(src_urls, full_urls)
         else:
             InfoBar.info(
                 title=self.tr('检查更新'),
@@ -477,23 +481,84 @@ class SettingInterface(ScrollArea):
                 parent=self.window()
             )
 
-    def _startDownload(self, urls):
+    def _startUpdate(self, src_urls, full_urls):
         # 每次开始下载前新建取消事件，旧的（如有）先置取消避免泄漏
         self._dl_cancel_event = threading.Event()
 
         def _dl_worker():
             try:
-                dest = os.path.join(tempfile.gettempdir(), "LiuYi_Setup_new.exe")
                 proxies = _detect_system_proxies()
-                self.downloadProgress.emit(0, self.tr("开始下载更新..."))
-                download_file(urls, dest, proxies,
+                install_dir = os.path.dirname(sys.executable)
+                # 1) 优先增量更新：下载几 MB 的源码包，覆盖安装目录的 DyberPet/ 后重启
+                if src_urls:
+                    try:
+                        dest = os.path.join(tempfile.gettempdir(), "LiuYi_source_patch.zip")
+                        self.downloadProgress.emit(0, self.tr("开始下载增量更新包..."))
+                        download_file(src_urls, dest, proxies,
+                                      lambda p, m: self.downloadProgress.emit(p, self.tr("下载增量包 ") + m),
+                                      cancel_event=self._dl_cancel_event)
+                        self.downloadProgress.emit(100, self.tr("正在应用更新并重启..."))
+                        self._apply_patch(dest, install_dir)   # 安装目录受保护时抛 PermissionError
+                        self.restartRequested.emit()
+                        return
+                    except PermissionError:
+                        # 安装目录受保护（如 Program Files），回退完整安装包（NSIS 可提权）
+                        _update_log("patch write denied, fallback to full installer")
+                    except Exception as e:
+                        _update_log(f"differential update failed: {type(e).__name__}: {e}; fallback full installer")
+                # 2) 回退：完整安装包（原有静默安装逻辑）
+                if not full_urls:
+                    raise RuntimeError(self.tr("未获取到安装包下载地址，请前往项目主页手动更新。"))
+                dest = os.path.join(tempfile.gettempdir(), "LiuYi_Setup_new.exe")
+                self.downloadProgress.emit(0, self.tr("开始下载完整安装包..."))
+                download_file(full_urls, dest, proxies,
                               lambda p, m: self.downloadProgress.emit(p, m),
                               cancel_event=self._dl_cancel_event)
                 self.downloadFinished.emit(True, dest)
             except Exception as e:
-                _update_log(f"auto download failed: {type(e).__name__}: {e}")
+                _update_log(f"auto update failed: {type(e).__name__}: {e}")
                 self.downloadFinished.emit(False, str(e))
         threading.Thread(target=_dl_worker, daemon=True).start()
+
+    def _apply_patch(self, zip_path, install_dir):
+        """解压源码补丁包并覆盖安装目录的 DyberPet/（增量更新核心步骤）。
+        安装目录无写权限时抛 PermissionError，由调用方回退完整安装包。"""
+        tmp = os.path.join(tempfile.gettempdir(), "LiuYi_patch_extract")
+        if os.path.isdir(tmp):
+            shutil.rmtree(tmp)
+        os.makedirs(tmp, exist_ok=True)
+        with zipfile.ZipFile(zip_path) as z:
+            z.extractall(tmp)
+        src = os.path.join(tmp, "DyberPet")
+        if not os.path.isdir(src):
+            raise FileNotFoundError(self.tr("补丁包结构异常：缺少 DyberPet/"))
+        dst = os.path.join(install_dir, "DyberPet")
+        self._copytree_overwrite(src, dst)
+
+    def _copytree_overwrite(self, src, dst):
+        """递归覆盖拷贝（仅拷贝文件，目录自动创建）。无写权限会抛 PermissionError。"""
+        if not os.path.isdir(dst):
+            shutil.copytree(src, dst)
+            return
+        for root, dirs, files in os.walk(src):
+            rel = os.path.relpath(root, src)
+            target_root = dst if rel == '.' else os.path.join(dst, rel)
+            os.makedirs(target_root, exist_ok=True)
+            for f in files:
+                s = os.path.join(root, f)
+                t = os.path.join(target_root, f)
+                shutil.copy2(s, t)
+
+    def _onRestartRequested(self):
+        """增量更新应用完成后，启动新进程并退出当前进程（释放单例锁）。"""
+        try:
+            env = dict(os.environ)
+            env['DYBERPET_RELAUNCH'] = '1'
+            subprocess.Popen([sys.executable], env=env)
+        except Exception as e:
+            _update_log(f"restart failed: {type(e).__name__}: {e}")
+        # 立即退出当前进程，释放单例锁，由新进程接管（新版松散源码已就位）
+        os._exit(0)
 
     def _cancelDownload(self):
         if getattr(self, '_dl_cancel_event', None) is not None:
@@ -692,11 +757,10 @@ def _http_get_json(url, proxies=None, timeout=15):
 
 
 def get_latest_release():
-    """拉取最新 Release：返回 (success, tag_name, api_asset_url, browser_download_url, mirror_url)。
+    """拉取最新 Release：返回 (success, tag_name, full_urls, src_urls)。
 
-    - api_asset_url: 通过 api.github.com 获取 asset 的下载 URL，在国内通常比 github.com 更稳。
-    - browser_download_url: 浏览器下载地址。
-    - mirror_url: ghproxy 国内镜像兜底。
+    - full_urls: 完整安装包 LiuYi_Setup.exe 的下载地址列表 [api_url, browser_url, mirror_url]
+    - src_urls:  增量更新源码包 DyberPet_source.zip 的下载地址列表（仅应用源码，约几 MB）
     """
     url = settings.RELEASE_API
     try:
@@ -705,26 +769,27 @@ def get_latest_release():
         data = json.loads(body)
         tag = data.get('tag_name')
         assets = data.get('assets', [])
-        api_asset_url = None
-        browser_url = None
+        full_api = full_browser = None
+        src_api = src_browser = None
         for a in assets:
-            if a.get('name', '').lower() == 'liuyi_setup.exe':
-                api_asset_url = a.get('url')
-                browser_url = a.get('browser_download_url')
-                break
-        if not browser_url:  # 兜底：取任意 .exe 资产
-            for a in assets:
-                if a.get('name', '').lower().endswith('.exe'):
-                    api_asset_url = a.get('url')
-                    browser_url = a.get('browser_download_url')
-                    break
-        mirror_url = None
-        if tag and browser_url:
-            mirror_url = f"https://gh-proxy.com/https://github.com/ChanChauncey/dyberpet-liuyi/releases/download/{tag}/LiuYi_Setup.exe"
-        return True, tag, api_asset_url, browser_url, mirror_url
+            name = (a.get('name') or '').lower()
+            if name == 'liuyi_setup.exe':
+                full_api = a.get('url')
+                full_browser = a.get('browser_download_url')
+            elif name == 'dyberpet_source.zip':
+                src_api = a.get('url')
+                src_browser = a.get('browser_download_url')
+        full_urls = [u for u in (full_api, full_browser) if u]
+        src_urls = [u for u in (src_api, src_browser) if u]
+        if tag:
+            full_mirror = f"https://gh-proxy.com/https://github.com/ChanChauncey/dyberpet-liuyi/releases/download/{tag}/LiuYi_Setup.exe"
+            src_mirror = f"https://gh-proxy.com/https://github.com/ChanChauncey/dyberpet-liuyi/releases/download/{tag}/DyberPet_source.zip"
+            full_urls.append(full_mirror)
+            src_urls.append(src_mirror)
+        return True, tag, full_urls, src_urls
     except Exception as e:
         _update_log(f"get_latest_release failed: {type(e).__name__}: {e}")
-        return False, None, None, None, None
+        return False, None, [], []
 
 
 def download_file(urls, dest, proxies, on_progress, cancel_event=None):
