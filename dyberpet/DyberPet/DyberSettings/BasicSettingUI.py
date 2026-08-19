@@ -10,15 +10,18 @@ from sys import platform
 import sys
 import subprocess
 import tempfile
+import ctypes
 
-from qfluentwidgets import (SettingCardGroup, SwitchSettingCard, HyperlinkCard,InfoBar,
+from qfluentwidgets import (SettingCardGroup, SwitchSettingCard, HyperlinkCard, InfoBar,
                             ComboBoxSettingCard, ScrollArea, ExpandLayout, InfoBarPosition,
-                            PushSettingCard, setThemeColor)
+                            PushSettingCard, setThemeColor, TitleLabel, ProgressBar,
+                            PrimaryPushButton, PushButton)
 
 from qfluentwidgets import FluentIcon as FIF
 from PySide6.QtCore import Qt, Signal, QUrl, QStandardPaths, QLocale, QTimer
 from PySide6.QtGui import QDesktopServices, QIcon
-from PySide6.QtWidgets import QWidget, QLabel, QApplication, QProgressDialog, QMessageBox
+from PySide6.QtWidgets import (QWidget, QLabel, QApplication, QProgressDialog, QMessageBox,
+                               QDialog, QVBoxLayout, QHBoxLayout, QTextBrowser)
 #from qframelesswindow import FramelessWindow
 
 from .custom_utils import (Dyber_RangeSettingCard, Dyber_ComboBoxSettingCard,
@@ -27,6 +30,51 @@ import DyberPet.settings as settings
 
 basedir = settings.BASEDIR
 module_path = os.path.join(basedir, 'DyberPet/DyberSettings/')
+
+# ---------- 开机自启（与安装程序共用 HKCU\...\Run\六一桌宠 注册表项）----------
+AUTOSTART_REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+AUTOSTART_REG_VALUE = "六一桌宠"   # 与安装程序 installer.py 保持一致
+
+
+def _autostart_exe_path():
+    """返回当前 exe 的完整路径（仅 frozen 安装态有效）。"""
+    if getattr(sys, 'frozen', False):
+        return os.path.join(os.path.dirname(sys.executable), "六一桌宠.exe")
+    return None
+
+
+def get_autostart():
+    """读取注册表，判断是否已设为开机自启。"""
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, AUTOSTART_REG_KEY)
+        val, _ = winreg.QueryValueEx(key, AUTOSTART_REG_VALUE)
+        winreg.CloseKey(key)
+        return bool(val)
+    except Exception:
+        return False
+
+
+def set_autostart(enable):
+    """写入或删除开机自启注册表项。enable=True 写入，False 删除。"""
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, AUTOSTART_REG_KEY,
+                             0, winreg.KEY_SET_VALUE)
+        if enable:
+            exe = _autostart_exe_path()
+            if exe:
+                winreg.SetValueEx(key, AUTOSTART_REG_VALUE, 0, winreg.REG_SZ,
+                                  '"{}"'.format(exe))
+        else:
+            try:
+                winreg.DeleteValue(key, AUTOSTART_REG_VALUE)
+            except FileNotFoundError:
+                pass
+        winreg.CloseKey(key)
+    except Exception:
+        pass
+
 '''
 if platform == 'win32':
     basedir = ''
@@ -48,10 +96,11 @@ class SettingInterface(ScrollArea):
     ontop_changed = Signal(name='ontop_changed')
     scale_changed = Signal(name='scale_changed')
     lang_changed = Signal(name='lang_changed')
-    checkUpdateFinished = Signal(bool, str, object, object)  # (has_update, info, full_urls, src_urls)
+    checkUpdateFinished = Signal(bool, str, object, object, str)  # (has_update, info, full_urls, src_urls, notes)
     downloadProgress = Signal(int, str)
     downloadFinished = Signal(bool, str)
-    restartRequested = Signal()  # 增量更新应用完成后请求主线程重启
+    patchProgress = Signal(int, str)   # 应用更新（解压+覆盖）进度/状态
+    restartRequested = Signal()        # 增量更新应用完成后请求主线程重启
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
@@ -94,6 +143,20 @@ class SettingInterface(ScrollArea):
         self.AutoLockCard.switchButton.checkedChanged.connect(self._AutoLockChanged)
         if platform != 'win32':
             self.AutoLockCard.switchButton.indicator.setEnabled(False)
+
+        # Auto-Start (Windows 开机自启，与安装程序共享注册表项)
+        self.AutoStartCard = SwitchSettingCard(
+            FIF.POWER_BUTTON,
+            self.tr("开机自动启动"),
+            self.tr("Windows 启动时自动运行六一桌宠"),
+            parent=self.ModeGroup
+        )
+        if platform == 'win32' and getattr(sys, 'frozen', False):
+            self.AutoStartCard.setChecked(get_autostart())
+            self.AutoStartCard.switchButton.checkedChanged.connect(self._AutoStartChanged)
+        else:
+            # 非 Windows 或未安装（开发态）不提供此开关
+            self.AutoStartCard.switchButton.indicator.setEnabled(False)
 
 
         # Interaction parameters =======================================================================
@@ -256,8 +319,6 @@ class SettingInterface(ScrollArea):
         )
         self.CheckUpdateCard.clicked.connect(self._onCheckUpdateClicked)
         self.checkUpdateFinished.connect(self._showUpdateResult)
-        self.downloadProgress.connect(self._onDownloadProgress)
-        self.downloadFinished.connect(self._onDownloadFinished)
         self.restartRequested.connect(self._onRestartRequested)
 
         self.__initWidget()
@@ -283,6 +344,7 @@ class SettingInterface(ScrollArea):
         # add cards to group
         self.ModeGroup.addSettingCard(self.AlwaysOnTopCard)
         self.ModeGroup.addSettingCard(self.AutoLockCard)
+        self.ModeGroup.addSettingCard(self.AutoStartCard)
         self.ModeGroup.addSettingCard(self.AllowPoopCard)
 
         self.InteractionGroup.addSettingCard(self.GravityCard)
@@ -346,6 +408,9 @@ class SettingInterface(ScrollArea):
             settings.auto_lock = False
         settings.save_settings()
 
+    def _AutoStartChanged(self, isChecked):
+        set_autostart(isChecked)
+
     def _GravityChanged(self, value):
         settings.gravity = value*0.01
         settings.save_settings()
@@ -396,47 +461,48 @@ class SettingInterface(ScrollArea):
 
     def _checkUpdate(self):
         local_version = settings.VERSION
-        success, github_version, full_urls, src_urls = get_latest_release()
+        success, github_version, full_urls, src_urls, notes = get_latest_release()
         if success:
             update_needed = compare_versions(local_version, github_version)
             if update_needed:
                 # 提示里显示【新版本号】，而不是当前版本号
-                return True, github_version + "  " + self.tr("New version available"), full_urls, src_urls
+                return True, github_version + "  " + self.tr("New version available"), full_urls, src_urls, notes
             else:
-                return False, local_version + "  " + self.tr("Already the latest"), [], []
+                return False, local_version + "  " + self.tr("Already the latest"), [], [], ""
         else:
-            return False, self.tr("无法连接 GitHub：请检查网络/代理（需与浏览器一致的出口），或手动查看 ") + settings.RELEASE_URL, [], []
+            return False, self.tr("无法连接 GitHub：请检查网络/代理（需与浏览器一致的出口），或手动查看 ") + settings.RELEASE_URL, [], [], ""
 
-    def _onCheckUpdateClicked(self):
+    def _onCheckUpdateClicked(self, silent=False):
         # 网络请求放到后台线程，避免界面卡顿（GitHub 国内访问可能较慢）
-        InfoBar.info(
-            title=self.tr('检查更新'),
-            content=self.tr('正在检查新版本...'),
-            duration=2000,
-            position=InfoBarPosition.TOP,
-            parent=self.window()
-        )
+        if not silent:
+            InfoBar.info(
+                title=self.tr('检查更新'),
+                content=self.tr('正在检查新版本...'),
+                duration=2000,
+                position=InfoBarPosition.TOP,
+                parent=self.window()
+            )
 
         def _worker():
             try:
-                has_update, info, full_urls, src_urls = self._checkUpdate()
+                has_update, info, full_urls, src_urls, notes = self._checkUpdate()
             except Exception as e:
                 print('[CheckUpdate] worker exception:', e)
-                has_update, info, full_urls, src_urls = False, self.tr('检查更新失败：网络异常或无法访问 GitHub，请稍后重试。'), [], []
+                has_update, info, full_urls, src_urls, notes = False, self.tr('检查更新失败：网络异常或无法访问 GitHub，请稍后重试。'), [], [], ""
             # 跨线程用 Signal 回主线程（QTimer 在 worker 线程无事件循环不会触发）。
             # 仅回传结果，是否下载安装交由用户在确认框里决定。
-            self.checkUpdateFinished.emit(has_update, info, full_urls, src_urls)
+            self.checkUpdateFinished.emit(has_update, info, full_urls, src_urls, notes)
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _showUpdateResult(self, has_update, info, full_urls, src_urls):
+    def _showUpdateResult(self, has_update, info, full_urls, src_urls, notes):
         # 同时把结果写回卡片副标题，确保一定可见
         try:
             self.CheckUpdateCard.setContent(info)
         except Exception:
             pass
         if has_update and (full_urls or src_urls):
-            # 发现新版本 -> 弹出「是否安装」确认框，确认后才下载
-            self._ask_install_update(info, src_urls, full_urls)
+            # 发现新版本 -> 弹出更新对话框（Cherry Studio 风格）
+            self._ask_install_update(info, src_urls, full_urls, notes)
         elif has_update:
             InfoBar.warning(
                 title=self.tr('发现新版本'),
@@ -454,32 +520,40 @@ class SettingInterface(ScrollArea):
                 parent=self.window()
             )
 
-    def _ask_install_update(self, info, src_urls, full_urls):
+    def _ask_install_update(self, info, src_urls, full_urls, notes):
         # 从 info 里取出版本号（形如 "v1.0.2  New version available"）
         ver = info.split()[0] if info else ""
-        box = QMessageBox(self.window())
-        box.setIcon(QMessageBox.Question)
-        box.setWindowTitle(self.tr('发现新版本'))
-        box.setText(self.tr('发现新版本 {ver}，是否下载并安装？').format(ver=ver))
-        if src_urls:
-            box.setInformativeText(self.tr('将优先下载增量更新包（仅应用源码，约几 MB）并自动重启；若失败则回退到完整安装包。'))
-        else:
-            box.setInformativeText(self.tr('安装包将自动下载并静默安装，完成后会自动重启，你的存档数据会保留。'))
-        box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        box.setButtonText(QMessageBox.Yes, self.tr('安装'))
-        box.setButtonText(QMessageBox.No, self.tr('取消'))
-        box.setDefaultButton(QMessageBox.Yes)
-        ret = box.exec()
-        if ret == QMessageBox.Yes:
-            self._startUpdate(src_urls, full_urls)
-        else:
-            InfoBar.info(
-                title=self.tr('检查更新'),
-                content=self.tr('已取消更新，你可以稍后在「关于」中再次检查更新。'),
-                duration=3000,
-                position=InfoBarPosition.TOP,
-                parent=self.window()
-            )
+        self._current_src_urls = src_urls
+        self._current_full_urls = full_urls
+        try:
+            dlg = UpdateDialog(self, ver, notes)
+            self._update_dlg = dlg
+            # 连接下载/应用进度到对话框（先断开旧连接，避免多次检查更新重复绑定）
+            for sig in (self.downloadProgress, self.downloadFinished, self.patchProgress):
+                try:
+                    sig.disconnect()
+                except Exception:
+                    pass
+            self.downloadProgress.connect(dlg.set_progress)
+            self.downloadFinished.connect(dlg.on_downloaded)
+            self.patchProgress.connect(dlg.set_patch_progress)
+            dlg.finished.connect(lambda _=None: self._disconnect_update_signals(dlg))
+            # 必须用 exec() 才能强制模态并前置到父窗口之上；show() 在 setModal(True) 下可能
+            # 因为父窗口焦点问题导致对话框不显示或被遮挡，表现为"点了没反应"。
+            dlg.exec()
+        except Exception as e:
+            _update_log(f"update dialog failed: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _disconnect_update_signals(self, dlg):
+        for sig in (self.downloadProgress, self.downloadFinished, self.patchProgress):
+            try:
+                sig.disconnect(dlg.set_progress)
+                sig.disconnect(dlg.on_downloaded)
+                sig.disconnect(dlg.set_patch_progress)
+            except Exception:
+                pass
 
     def _startUpdate(self, src_urls, full_urls):
         # 每次开始下载前新建取消事件，旧的（如有）先置取消避免泄漏
@@ -488,41 +562,95 @@ class SettingInterface(ScrollArea):
         def _dl_worker():
             try:
                 proxies = _detect_system_proxies()
-                install_dir = os.path.dirname(sys.executable)
-                # 1) 优先增量更新：下载几 MB 的源码包，覆盖安装目录的 DyberPet/ 后重启
+                # 1) 优先增量更新：下载源码包（约几百 KB）覆盖安装目录的 DyberPet/。
+                #    安装目录无写权限（如 C:\Program Files）时，_apply_patch 内部自动弹 UAC 提权。
                 if src_urls:
-                    try:
-                        dest = os.path.join(tempfile.gettempdir(), "LiuYi_source_patch.zip")
-                        self.downloadProgress.emit(0, self.tr("开始下载增量更新包..."))
-                        download_file(src_urls, dest, proxies,
-                                      lambda p, m: self.downloadProgress.emit(p, self.tr("下载增量包 ") + m),
-                                      cancel_event=self._dl_cancel_event)
-                        self.downloadProgress.emit(100, self.tr("正在应用更新并重启..."))
-                        self._apply_patch(dest, install_dir)   # 安装目录受保护时抛 PermissionError
-                        self.restartRequested.emit()
-                        return
-                    except PermissionError:
-                        # 安装目录受保护（如 Program Files），回退完整安装包（NSIS 可提权）
-                        _update_log("patch write denied, fallback to full installer")
-                    except Exception as e:
-                        _update_log(f"differential update failed: {type(e).__name__}: {e}; fallback full installer")
-                # 2) 回退：完整安装包（原有静默安装逻辑）
-                if not full_urls:
-                    raise RuntimeError(self.tr("未获取到安装包下载地址，请前往项目主页手动更新。"))
-                dest = os.path.join(tempfile.gettempdir(), "LiuYi_Setup_new.exe")
-                self.downloadProgress.emit(0, self.tr("开始下载完整安装包..."))
-                download_file(full_urls, dest, proxies,
-                              lambda p, m: self.downloadProgress.emit(p, m),
-                              cancel_event=self._dl_cancel_event)
-                self.downloadFinished.emit(True, dest)
+                    dest = os.path.join(tempfile.gettempdir(), "LiuYi_source_patch.zip")
+                    self.downloadProgress.emit(0, self.tr("开始下载增量更新包..."))
+                    download_file(src_urls, dest, proxies,
+                                  lambda p, m: self.downloadProgress.emit(p, m),
+                                  cancel_event=self._dl_cancel_event)
+                    self.downloadFinished.emit(True, dest)
+                    return
+                # 2) 回退：完整安装包
+                if full_urls:
+                    dest = os.path.join(tempfile.gettempdir(), "LiuYi_Setup_new.exe")
+                    self.downloadProgress.emit(0, self.tr("开始下载完整安装包..."))
+                    download_file(full_urls, dest, proxies,
+                                  lambda p, m: self.downloadProgress.emit(p, m),
+                                  cancel_event=self._dl_cancel_event)
+                    self.downloadFinished.emit(True, dest)
+                    return
+                raise RuntimeError(self.tr("未获取到更新包下载地址，请前往项目主页手动更新。"))
             except Exception as e:
                 _update_log(f"auto update failed: {type(e).__name__}: {e}")
                 self.downloadFinished.emit(False, str(e))
         threading.Thread(target=_dl_worker, daemon=True).start()
 
-    def _apply_patch(self, zip_path, install_dir):
+    def _cancelDownload(self):
+        if getattr(self, '_dl_cancel_event', None) is not None:
+            self._dl_cancel_event.set()
+
+    def _installAndRestart(self, payload):
+        """应用增量更新（解压覆盖 DyberPet/）并在完成后重启。后台线程执行。"""
+        if not payload:
+            return
+        self.patchProgress.emit(0, self.tr("正在应用更新..."))
+        def _patch_worker():
+            try:
+                install_dir = os.path.dirname(sys.executable)
+                self._apply_patch(payload)  # 覆盖 DyberPet/，无权限时内部弹 UAC
+                self.patchProgress.emit(100, self.tr("更新完成，即将重启..."))
+                self.restartRequested.emit()
+            except Exception as e:
+                _update_log(f"apply patch failed: {type(e).__name__}: {e}")
+                self.patchProgress.emit(-1, str(e))
+        threading.Thread(target=_patch_worker, daemon=True).start()
+
+    def _onRestartRequested(self):
+        """增量更新应用完成后，启动新进程并退出当前进程（释放单例锁）。"""
+        try:
+            env = dict(os.environ)
+            env['DYBERPET_RELAUNCH'] = '1'
+            subprocess.Popen([sys.executable], env=env)
+        except Exception as e:
+            _update_log(f"restart failed: {type(e).__name__}: {e}")
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
+        os._exit(0)
+
+    def _launch_installer_exe(self, payload):
+        """回退路径：完整安装包（exe）以管理员权限（UAC 提权）静默安装并退出当前程序。
+        用于没有增量源码包、或增量失败后的兜底。当前进程必须退出以释放被锁定的 exe。"""
+        install_dir = os.path.dirname(sys.executable)
+        try:
+            params = f'--silent --target "{install_dir}" --keep-data'
+            # 使用 ctypes ShellExecuteW("runas") 触发 UAC 提权；直接 Popen 不会弹 UAC。
+            ret = ctypes.windll.shell32.ShellExecuteW(
+                None, "runas", payload, params, None, 1)
+            if ret <= 32:
+                raise OSError(f"ShellExecuteW failed, ret={ret}")
+        except Exception as e:
+            _update_log(f"launch installer failed: {type(e).__name__}: {e}")
+            InfoBar.error(
+                title=self.tr('启动安装失败'),
+                content=str(e)[:120],
+                duration=5000,
+                position=InfoBarPosition.TOP,
+                parent=self.window()
+            )
+            return
+        # 退出当前程序，释放被锁定的 exe，交由提权后的静默安装接管
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
+        os._exit(0)
+
+    def _apply_patch(self, zip_path):
         """解压源码补丁包并覆盖安装目录的 DyberPet/（增量更新核心步骤）。
-        安装目录无写权限时抛 PermissionError，由调用方回退完整安装包。"""
+        安装目录无写权限（如 C:\\Program Files）时自动弹 UAC 提权完成复制；
+        提权仍失败才由调用方回退完整安装包。"""
         tmp = os.path.join(tempfile.gettempdir(), "LiuYi_patch_extract")
         if os.path.isdir(tmp):
             shutil.rmtree(tmp)
@@ -532,8 +660,35 @@ class SettingInterface(ScrollArea):
         src = os.path.join(tmp, "DyberPet")
         if not os.path.isdir(src):
             raise FileNotFoundError(self.tr("补丁包结构异常：缺少 DyberPet/"))
+        install_dir = os.path.dirname(sys.executable)
         dst = os.path.join(install_dir, "DyberPet")
-        self._copytree_overwrite(src, dst)
+        try:
+            self._copytree_overwrite(src, dst)
+        except PermissionError:
+            _update_log("patch write denied, try UAC elevation")
+            self._apply_patch_elevated(src, dst)
+        # 校验：目标目录出现新版 settings.py 才算成功
+        if not os.path.isfile(os.path.join(dst, 'settings.py')):
+            raise PermissionError(self.tr("更新未完成，请手动以管理员身份运行安装程序更新。"))
+        return dst
+
+    def _apply_patch_elevated(self, src, dst):
+        """以管理员身份（UAC 提权弹窗）把 src 复制到安装目录 dst。
+        用于安装目录受保护（如 C:\\Program Files）且普通用户无写权限的情况。"""
+        sys_tmp = os.path.join(os.environ.get('SystemRoot', 'C:\\Windows'), 'Temp')
+        os.makedirs(sys_tmp, exist_ok=True)
+        stage = os.path.join(sys_tmp, "LiuYi_patch_stage", "DyberPet")
+        if os.path.isdir(os.path.dirname(stage)):
+            shutil.rmtree(os.path.dirname(stage))
+        self._copytree_overwrite(src, stage)
+        # 用 ShellExecuteEx + runas 弹 UAC，提权后 robocopy 复制（只动 DyberPet/ 目录）
+        params = '/c robocopy "%s" "%s" /E /IS /R:0 /W:0' % (stage, dst)
+        try:
+            _run_elevated("cmd.exe", params)
+        except Exception as e:
+            raise PermissionError(self.tr("提权复制失败（已取消或出错）：") + str(e))
+        if not os.path.isfile(os.path.join(dst, 'settings.py')):
+            raise PermissionError(self.tr("提权复制未完成，请手动以管理员身份运行安装程序更新。"))
 
     def _copytree_overwrite(self, src, dst):
         """递归覆盖拷贝（仅拷贝文件，目录自动创建）。无写权限会抛 PermissionError。"""
@@ -548,102 +703,6 @@ class SettingInterface(ScrollArea):
                 s = os.path.join(root, f)
                 t = os.path.join(target_root, f)
                 shutil.copy2(s, t)
-
-    def _onRestartRequested(self):
-        """增量更新应用完成后，启动新进程并退出当前进程（释放单例锁）。"""
-        try:
-            env = dict(os.environ)
-            env['DYBERPET_RELAUNCH'] = '1'
-            subprocess.Popen([sys.executable], env=env)
-        except Exception as e:
-            _update_log(f"restart failed: {type(e).__name__}: {e}")
-        # 立即退出当前进程，释放单例锁，由新进程接管（新版松散源码已就位）
-        os._exit(0)
-
-    def _cancelDownload(self):
-        if getattr(self, '_dl_cancel_event', None) is not None:
-            self._dl_cancel_event.set()
-        if getattr(self, '_dl_dlg', None) is not None:
-            try:
-                self._dl_dlg.close()
-            except Exception:
-                pass
-            self._dl_dlg = None
-
-    def _onDownloadProgress(self, pct, msg):
-        if not hasattr(self, '_dl_dlg') or self._dl_dlg is None:
-            self._dl_dlg = QProgressDialog(self.tr("正在下载更新..."), self.tr("取消"), 0, 100, self.window())
-            self._dl_dlg.setWindowTitle(self.tr("自动更新"))
-            self._dl_dlg.setAutoClose(False)
-            self._dl_dlg.setMinimumDuration(0)
-            self._dl_dlg.canceled.connect(self._cancelDownload)
-            self._dl_dlg.show()
-        if self._dl_dlg is not None:
-            self._dl_dlg.setValue(pct if pct > 0 else 1)
-            self._dl_dlg.setLabelText(msg)
-
-    def _onDownloadFinished(self, ok, payload):
-        if getattr(self, '_dl_dlg', None) is not None:
-            try:
-                self._dl_dlg.close()
-            except Exception:
-                pass
-            self._dl_dlg = None
-        if not ok:
-            err = str(payload)
-            # 用户主动取消不弹错误提示
-            if '取消' in err or 'InterruptedError' in err or 'cancel' in err.lower():
-                InfoBar.info(
-                    title=self.tr('已取消'),
-                    content=self.tr('更新下载已取消，你可以稍后再试。'),
-                    duration=3000,
-                    position=InfoBarPosition.TOP,
-                    parent=self.window()
-                )
-                return
-            # 卡住/超时类错误给出更友好的提示
-            hint = self.tr('网络较慢或 GitHub 被限速，建议开启代理或前往 Releases 手动下载。')
-            if '停滞' in err or 'Timeout' in err or 'time' in err.lower():
-                content = err[:80] + "\n" + hint
-            else:
-                content = self.tr('无法自动下载安装包：') + err[:120]
-            InfoBar.error(
-                title=self.tr('下载更新失败'),
-                content=content,
-                duration=8000,
-                position=InfoBarPosition.TOP,
-                parent=self.window()
-            )
-            return
-        install_dir = os.path.dirname(sys.executable)
-        InfoBar.info(
-            title=self.tr('下载完成'),
-            content=self.tr('即将自动安装更新，请稍候...'),
-            duration=1200,
-            position=InfoBarPosition.TOP,
-            parent=self.window()
-        )
-        # 延迟一点点让提示可见，然后调起静默安装并退出当前程序
-        # （退出是为了释放被锁定的 exe，交给静默安装覆盖写入）
-        QTimer.singleShot(1400, lambda: self._launch_installer(payload, install_dir))
-
-    def _launch_installer(self, payload, install_dir):
-        try:
-            subprocess.Popen([payload, '--silent', '--target', install_dir, '--keep-data'])
-        except Exception as e:
-            InfoBar.error(
-                title=self.tr('启动安装失败'),
-                content=str(e)[:120],
-                duration=5000,
-                position=InfoBarPosition.TOP,
-                parent=self.window()
-            )
-            return
-        # 退出当前程序，释放被锁定的 exe，交由静默安装接管
-        app = QApplication.instance()
-        if app is not None:
-            app.quit()
-        os._exit(0)
 
     def _AllowToasterChanged(self, isChecked):
         if isChecked:
@@ -756,11 +815,32 @@ def _http_get_json(url, proxies=None, timeout=15):
         return response.status, response.read()
 
 
-def get_latest_release():
-    """拉取最新 Release：返回 (success, tag_name, full_urls, src_urls)。
+# 国内 GitHub 镜像加速列表（按可用性排序）。
+# 这些镜像通过「前置完整 github 链接」的方式代理 releases 文件下载，例如：
+#   https://ghproxy.net/https://github.com/ChanChauncey/dyberpet-liuyi/releases/download/v1.0.4/LiuYi_Setup.exe
+# 下载时优先尝试镜像，全部失败再回退官方直链，避免国内直连 GitHub 被限流/卡死。
+GITHUB_MIRRORS = [
+    "https://ghproxy.net/",
+    "https://ghproxy.com/",
+    "https://mirror.ghproxy.com/",
+    "https://gh.api.99988866.xyz/",
+]
 
-    - full_urls: 完整安装包 LiuYi_Setup.exe 的下载地址列表 [api_url, browser_url, mirror_url]
-    - src_urls:  增量更新源码包 DyberPet_source.zip 的下载地址列表（仅应用源码，约几 MB）
+
+def _mirror_urls(browser_url):
+    """把官方 browser_download_url 转成各镜像的完整下载地址列表。"""
+    if not browser_url:
+        return []
+    return [m + browser_url for m in GITHUB_MIRRORS]
+
+
+def get_latest_release():
+    """拉取最新 Release：返回 (success, tag_name, full_urls, src_urls, notes)。
+
+    - full_urls / src_urls 均为下载地址列表，已按「国内镜像优先、官方直链兜底」排序，
+      download_file() 会依次尝试，因此国内用户首跳即为加速镜像。
+    - src_urls 指向增量源码包 DyberPet_source.zip（仅应用源码，覆盖安装目录 DyberPet/ 即可）。
+    - notes 为 Release 正文（更新日志，Markdown），供更新弹窗渲染。
     """
     url = settings.RELEASE_API
     try:
@@ -768,28 +848,24 @@ def get_latest_release():
         status, body = _http_get_json(url, proxies=proxies, timeout=20)
         data = json.loads(body)
         tag = data.get('tag_name')
+        notes = data.get('body') or ''
         assets = data.get('assets', [])
         full_api = full_browser = None
         src_api = src_browser = None
         for a in assets:
             name = (a.get('name') or '').lower()
-            if name == 'liuyi_setup.exe':
+            if name.startswith('liuyi_setup') and name.endswith('.exe'):
                 full_api = a.get('url')
                 full_browser = a.get('browser_download_url')
             elif name == 'dyberpet_source.zip':
                 src_api = a.get('url')
                 src_browser = a.get('browser_download_url')
-        full_urls = [u for u in (full_api, full_browser) if u]
-        src_urls = [u for u in (src_api, src_browser) if u]
-        if tag:
-            full_mirror = f"https://gh-proxy.com/https://github.com/ChanChauncey/dyberpet-liuyi/releases/download/{tag}/LiuYi_Setup.exe"
-            src_mirror = f"https://gh-proxy.com/https://github.com/ChanChauncey/dyberpet-liuyi/releases/download/{tag}/DyberPet_source.zip"
-            full_urls.append(full_mirror)
-            src_urls.append(src_mirror)
-        return True, tag, full_urls, src_urls
+        full_urls = _mirror_urls(full_browser) + [u for u in (full_browser, full_api) if u]
+        src_urls = _mirror_urls(src_browser) + [u for u in (src_browser, src_api) if u]
+        return True, tag, full_urls, src_urls, notes
     except Exception as e:
         _update_log(f"get_latest_release failed: {type(e).__name__}: {e}")
-        return False, None, [], []
+        return False, None, [], [], ''
 
 
 def download_file(urls, dest, proxies, on_progress, cancel_event=None):
@@ -932,3 +1008,221 @@ def compare_versions(local_version, github_version):
         return True  # User should update
     else:
         return False  # Local version is up to date or ahead
+
+
+def _run_elevated(cmd, params):
+    """以管理员身份（UAC 提权弹窗）运行 cmd + params，并等待其结束。
+    UAC 被取消时 ShellExecuteEx 返回 0，抛出异常；否则正常返回。"""
+    import ctypes
+    from ctypes import wintypes
+
+    class SHELLEXECUTEINFO(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", wintypes.DWORD),
+            ("fMask", wintypes.ULONG),
+            ("hwnd", wintypes.HWND),
+            ("lpVerb", wintypes.LPCWSTR),
+            ("lpFile", wintypes.LPCWSTR),
+            ("lpParameters", wintypes.LPCWSTR),
+            ("lpDirectory", wintypes.LPCWSTR),
+            ("nShow", ctypes.c_int),
+            ("hInstApp", wintypes.HINSTANCE),
+            ("lpIDList", ctypes.c_void_p),
+            ("lpClass", wintypes.LPCWSTR),
+            ("hKeyClass", wintypes.HKEY),
+            ("dwHotKey", wintypes.DWORD),
+            ("hIconOrMonitor", wintypes.HANDLE),
+            ("hProcess", wintypes.HANDLE),
+        ]
+
+    SEE_MASK_NOCLOSEPROCESS = 0x00000040
+    ctypes.windll.shell32.ShellExecuteExW.argtypes = [ctypes.POINTER(SHELLEXECUTEINFO)]
+    ctypes.windll.shell32.ShellExecuteExW.restype = wintypes.BOOL
+    ctypes.windll.kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    ctypes.windll.kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    ctypes.windll.kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    ctypes.windll.kernel32.CloseHandle.restype = wintypes.BOOL
+
+    sei = SHELLEXECUTEINFO()
+    sei.cbSize = ctypes.sizeof(sei)
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS
+    sei.lpVerb = "runas"
+    sei.lpFile = cmd
+    sei.lpParameters = params
+    sei.nShow = 0  # SW_HIDE：隐藏提权后的控制台窗口（避免更新时弹黑框）
+    if not ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(sei)):
+        raise PermissionError("ShellExecuteEx failed (UAC 可能被取消)")
+    if sei.hProcess:
+        ctypes.windll.kernel32.WaitForSingleObject(sei.hProcess, 0xFFFFFFFF)
+        ctypes.windll.kernel32.CloseHandle(sei.hProcess)
+
+
+class UpdateDialog(QDialog):
+    """Cherry Studio 风格的更新弹窗：居中卡片，标题+版本、更新日志、进度条+百分比+速度、状态按钮。"""
+
+    def __init__(self, host, version, notes):
+        super().__init__(host.window())
+        self.host = host
+        self.version = version or ""
+        self.notes = notes or ""
+        self.payload = None
+        self.payload_is_exe = False
+        self._build_ui()
+        self._apply_style()
+        self._set_state('idle')
+
+    def _build_ui(self):
+        self.setWindowTitle(self.tr("软件更新"))
+        self.setMinimumWidth(460)
+        self.setMinimumHeight(520)
+        self.setModal(True)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(28, 26, 28, 24)
+        root.setSpacing(14)
+
+        head = QHBoxLayout()
+        icon_lbl = QLabel()
+        try:
+            pix = QIcon(os.path.join(settings.BASEDIR, 'app_icon.png')).pixmap(44, 44)
+            icon_lbl.setPixmap(pix)
+        except Exception:
+            icon_lbl.setText("🐾")
+        head.addWidget(icon_lbl)
+        head.addSpacing(12)
+        vbox = QVBoxLayout()
+        self.title_lbl = TitleLabel(self.tr("发现新版本"))
+        self.title_lbl.setObjectName("updateTitle")
+        self.ver_lbl = QLabel(self.version)
+        self.ver_lbl.setObjectName("updateVersion")
+        vbox.addWidget(self.title_lbl)
+        vbox.addWidget(self.ver_lbl)
+        head.addLayout(vbox)
+        head.addStretch(1)
+        root.addLayout(head)
+
+        self.sub_lbl = QLabel(self.tr("新版已发布，建议尽快更新以获得更好的体验。"))
+        self.sub_lbl.setObjectName("updateSub")
+        root.addWidget(self.sub_lbl)
+
+        self.log = QTextBrowser()
+        self.log.setOpenExternalLinks(True)
+        self.log.setMarkdown(self._clean_md(self.notes))
+        self.log.setMinimumHeight(180)
+        root.addWidget(self.log, 1)
+
+        self.progress = ProgressBar()
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        root.addWidget(self.progress)
+        self.progress_lbl = QLabel("")
+        self.progress_lbl.setObjectName("updateProgressLbl")
+        root.addWidget(self.progress_lbl)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        self.later_btn = PushButton(self.tr("稍后"))
+        self.cancel_btn = PushButton(self.tr("取消"))
+        self.start_btn = PrimaryPushButton(self.tr("立即更新"))
+        self.restart_btn = PrimaryPushButton(self.tr("安装并重启"))
+        btn_row.addWidget(self.later_btn)
+        btn_row.addWidget(self.cancel_btn)
+        btn_row.addWidget(self.start_btn)
+        btn_row.addWidget(self.restart_btn)
+        root.addLayout(btn_row)
+
+        self.later_btn.clicked.connect(self.reject)
+        self.cancel_btn.clicked.connect(lambda: self.host._cancelDownload())
+        self.start_btn.clicked.connect(self._on_start)
+        self.restart_btn.clicked.connect(self._on_restart)
+
+    def _apply_style(self):
+        self.setStyleSheet("""
+            #updateTitle { font-size: 20px; font-weight: 700; }
+            #updateVersion { font-size: 14px; color: #2b88ff; font-weight: 600; }
+            #updateSub { font-size: 12px; color: rgba(128,128,128,0.95); }
+            #updateProgressLbl { font-size: 12px; color: rgba(128,128,128,0.95); }
+            QTextBrowser { border: 1px solid rgba(128,128,128,0.25); border-radius: 8px;
+                           padding: 10px; background: rgba(128,128,128,0.06); }
+        """)
+        try:
+            self.log.document().setDocumentMargin(4)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _clean_md(md):
+        # GitHub release body 是 markdown；QTextBrowser.setMarkdown 可渲染标题/列表/加粗/链接。
+        return (md or "").strip()
+
+    # ---- 状态机 ----
+    def _set_state(self, state):
+        self._state = state
+        if state == 'idle':
+            self.progress.hide(); self.progress_lbl.hide()
+            self.start_btn.show(); self.start_btn.setEnabled(True)
+            self.cancel_btn.hide(); self.restart_btn.hide(); self.later_btn.show()
+            self.start_btn.setText(self.tr("立即更新"))
+        elif state == 'downloading':
+            self.progress.show(); self.progress_lbl.show()
+            self.start_btn.hide(); self.cancel_btn.show()
+            self.restart_btn.hide(); self.later_btn.hide()
+        elif state == 'ready':
+            self.progress.setValue(100); self.progress.show(); self.progress_lbl.show()
+            self.start_btn.hide(); self.cancel_btn.hide()
+            self.restart_btn.show(); self.later_btn.show()
+        elif state == 'applying':
+            self.progress.show(); self.progress_lbl.show()
+            self.start_btn.hide(); self.cancel_btn.hide()
+            self.restart_btn.hide(); self.later_btn.hide()
+        elif state == 'error':
+            self.start_btn.show(); self.start_btn.setEnabled(True)
+            self.cancel_btn.hide(); self.restart_btn.hide(); self.later_btn.show()
+            self.start_btn.setText(self.tr("重试"))
+
+    # ---- 由 host 信号驱动 ----
+    def set_progress(self, pct, msg):
+        if getattr(self, '_state', 'idle') != 'downloading':
+            self._set_state('downloading')
+        self.progress.setValue(max(0, pct))
+        self.progress_lbl.setText(msg)
+
+    def on_downloaded(self, ok, payload):
+        if ok:
+            self.payload = payload
+            self.payload_is_exe = payload.endswith('.exe')
+            self._set_state('ready')
+            if self.payload_is_exe:
+                self.progress_lbl.setText(self.tr("完整安装包已下载，点击「安装并重启」完成更新"))
+            else:
+                self.progress_lbl.setText(self.tr("下载完成，点击「安装并重启」完成更新"))
+        else:
+            err = str(payload)
+            self.payload = None
+            if '取消' in err or 'InterruptedError' in err or 'cancel' in err.lower():
+                self.reject()
+                return
+            self.progress_lbl.setText(self.tr("下载失败：") + err[:80])
+            self._set_state('error')
+
+    def set_patch_progress(self, pct, msg):
+        if pct < 0:
+            self.progress_lbl.setText(self.tr("更新失败：") + str(msg)[:80])
+            self._set_state('error')
+            return
+        self._set_state('applying')
+        self.progress.setValue(max(0, min(100, pct)))
+        self.progress_lbl.setText(msg)
+
+    # ---- 按钮回调 ----
+    def _on_start(self):
+        self._set_state('downloading')
+        self.host._startUpdate(self.host._current_src_urls, self.host._current_full_urls)
+
+    def _on_restart(self):
+        if not self.payload:
+            return
+        if getattr(self, 'payload_is_exe', False):
+            self.host._launch_installer_exe(self.payload)
+        else:
+            self.host._installAndRestart(self.payload)

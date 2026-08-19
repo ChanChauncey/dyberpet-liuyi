@@ -1,23 +1,80 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 
+
 # ---- 优先加载安装目录下的松散 DyberPet 源码（增量更新的覆盖目标）----
-# 把自定义查找器插到 PyInstaller 冻结导入器之前；若安装目录没有松散 DyberPet
-# 文件夹（老版本/未覆盖），find_spec 返回 None，自动回退到冻结版，不会崩。
+# one-folder 构建下 exe 与 DyberPet/ 松散包同处安装目录。PyInstaller 同时把
+# DyberPet 源码打包进 PYZ（冻结副本）。本查找器拦截 "DyberPet" 及其所有子模块
+# （含任意嵌套层级），确保优先从安装目录的 DyberPet/ 加载（增量更新覆盖后的新版），
+# 而不是冻结副本。若某模块在松散目录中不存在，返回 None 让 FrozenImporter 回退到
+# 冻结副本；若安装目录根本没有松散 DyberPet 包，整个查找器不生效，走冻结版。
 if getattr(sys, 'frozen', False):
     try:
         _install_dir = os.path.dirname(sys.executable)
         _loose_dyberpet = os.path.join(_install_dir, 'DyberPet')
-        if os.path.isdir(_loose_dyberpet):
-            from importlib.machinery import FileFinder, SourceFileLoader, SourcelessFileLoader
+        if os.path.isfile(os.path.join(_loose_dyberpet, '__init__.py')):
+            from importlib.machinery import (
+                FileFinder, SourceFileLoader, SourcelessFileLoader,
+                SOURCE_SUFFIXES, BYTECODE_SUFFIXES, ModuleSpec,
+            )
+            # 顶层 DyberPet 包在安装目录根下查找
+            _root_finder = FileFinder(
+                _install_dir,
+                (SourceFileLoader, SOURCE_SUFFIXES),
+                (SourcelessFileLoader, BYTECODE_SUFFIXES),
+            )
+
             class _LooseDyberPetFinder:
-                def find_spec(self, fullname, target=None, path=None):
-                    if fullname != 'DyberPet' and not fullname.startswith('DyberPet.'):
-                        return None
-                    return FileFinder(_loose_dyberpet, SourceFileLoader, SourcelessFileLoader).find_spec(fullname, target=target, path=path)
+                def find_spec(self, fullname, path=None, target=None):
+                    if fullname == 'DyberPet':
+                        return _root_finder.find_spec(fullname, target=target)
+                    if fullname.startswith('DyberPet.'):
+                        if path:
+                            # 导入系统传入父包 __path__（如
+                            # [install_dir/DyberPet/DyberSettings]），取最后一
+                            # 个分量到该目录下查找，从而正确解析任意嵌套子模块。
+                            leaf = fullname.rpartition('.')[2]
+                            _f = FileFinder(
+                                path[0],
+                                (SourceFileLoader, SOURCE_SUFFIXES),
+                                (SourcelessFileLoader, BYTECODE_SUFFIXES),
+                            )
+                            spec = _f.find_spec(leaf, target=target)
+                        else:
+                            # 防御：无 path 时按相对名在 DyberPet/ 下查找
+                            rel = fullname[len('DyberPet.'):]
+                            _f = FileFinder(
+                                _loose_dyberpet,
+                                (SourceFileLoader, SOURCE_SUFFIXES),
+                                (SourcelessFileLoader, BYTECODE_SUFFIXES),
+                            )
+                            spec = _f.find_spec(rel, target=target)
+                        if spec is None:
+                            return None
+                        # FileFinder 返回的 spec/loader 名字是叶子名（如
+                        # "utils"），直接改名会导致 "loader for utils cannot
+                        # handle DyberPet.utils"。重建以全名为名的 loader/spec。
+                        if isinstance(spec.loader, SourceFileLoader):
+                            _loader = SourceFileLoader(fullname, spec.origin)
+                        elif isinstance(spec.loader, SourcelessFileLoader):
+                            _loader = SourcelessFileLoader(fullname, spec.origin)
+                        else:
+                            _loader = spec.loader
+                        _new = ModuleSpec(
+                            fullname, _loader, origin=spec.origin,
+                            loader_state=spec.loader_state,
+                            is_package=spec.submodule_search_locations is not None,
+                        )
+                        _new.submodule_search_locations = spec.submodule_search_locations
+                        _new.cached = spec.cached
+                        _new.has_location = spec.has_location
+                        return _new
+                    return None
+
             sys.meta_path.insert(0, _LooseDyberPetFinder())
     except Exception:
         pass
+
 
 from sys import platform
 import ctypes
@@ -100,9 +157,10 @@ class DyberPetApp(QApplication):
         self.acc = DPAccessory()
         print(f"[启动] DPAccessory: {time.time()-t3:.2f}s")
 
-        # 延迟初始化：首次打开时再创建
+        # 延迟初始化控制面板；Dashboard 需要立即创建以便接收掉落/金币/升级奖励
         self.conp = None
-        self.board = None
+        self.board = DashboardMainWindow()
+        self._connect_board_signals()
 
         # Midnight Timer
         self.current_date = QDate.currentDate()
@@ -112,12 +170,34 @@ class DyberPetApp(QApplication):
         self.__connectSignalToSlot()
         print(f"[启动] 总耗时: {time.time()-t0:.2f}s")
 
-    def _ensure_conp(self):
-        """延迟初始化 ControlMainWindow"""
+        # 启动后自动检测更新（延迟 6s，避免影响启动；后台联网，不阻塞 UI）。
+        # 发现新版本会直接弹出 Cherry Studio 风格更新卡片（由 SettingInterface 处理），
+        # 全程不打开浏览器、不打扰（无更新则保持静默）。
+        QTimer.singleShot(6000, self._auto_check_update)
+
+    def _auto_check_update(self):
+        """启动自动检测 GitHub Release 是否有新版本；有则弹更新卡片。
+
+        走与手动点击「检查更新」完全相同的路径（SettingInterface._onCheckUpdateClicked），
+        最终弹出 UpdateDialog（Cherry Studio 风格增量更新卡片）。绝不调用 webbrowser，
+        绝不自动打开 GitHub 网页。无更新或检测失败均静默，不打扰用户。
+        """
+        def _trigger():
+            try:
+                # 只创建控制面板对象，不显示窗口（更新卡片由 UpdateDialog.exec 自行弹出）
+                self._ensure_conp(show=False)
+                self.conp.settingInterface._onCheckUpdateClicked(silent=True)
+            except Exception as e:
+                print('[AutoCheckUpdate]', repr(e))
+        QTimer.singleShot(0, _trigger)
+
+    def _ensure_conp(self, show=True):
+        """延迟初始化 ControlMainWindow。show=False 时只创建对象不显示窗口。"""
         if self.conp is None:
             self.conp = ControlMainWindow()
             self._connect_conp_signals()
-        self.conp.show_window()
+        if show:
+            self.conp.show_window()
 
     def _ensure_board(self):
         """延迟初始化 DashboardMainWindow"""
@@ -183,6 +263,8 @@ class DyberPetApp(QApplication):
         self.board.backpackInterface.use_item_inven.connect(self.p.use_item)
         self.board.backpackInterface.item_note.connect(self.p.register_notification)
         self.board.backpackInterface.item_drop.connect(self.p.item_drop_anim)
+        # 掉落/金币/升级奖励统一交给 Dashboard 背包处理；extra_windows.Inventory 不再监听，
+        # 避免一次掉落被两个背包各自随机出不同物品（弹两个通知但只在一个背包显示）。
         self.p.fvlvl_changed_main_inve.connect(self.board.backpackInterface.fvchange)
         self.p.fvlvl_changed_main_inve.connect(self.board.shopInterface.fvchange)
         self.p.addItem_toInven.connect(self.board.backpackInterface.add_items)

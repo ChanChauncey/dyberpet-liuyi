@@ -503,7 +503,6 @@ class PetWidget(QWidget):
     single_pomo_done = Signal(name="single_pomo_done")
 
     refresh_acts = Signal(name='refresh_acts')
-    updateReminderSignal = Signal(str, name='updateReminderSignal')
 
     def __init__(self, parent=None, curr_pet_name=None, pets=(), screens=[]):
         """
@@ -598,74 +597,6 @@ class PetWidget(QWidget):
 
         self._setup_compensate()
 
-        # 启动后自动检测新版本（延迟4s，避免影响启动；网络请求在后台线程）
-        self.updateReminderSignal.connect(self._showUpdateReminder)
-        QTimer.singleShot(4000, self._autoCheckUpdate)
-
-    def _autoCheckUpdate(self):
-        """启动后自动检测 GitHub Release 是否有新版本；发现则弹窗提醒（不阻塞启动）。
-
-        结果通过 Qt 信号跨线程回主线程，不能用 QTimer.singleShot 从工作线程直接弹 UI
-        （工作线程无事件循环，singleShot 不会触发，会导致提醒永不出现）。
-        """
-        def _worker():
-            try:
-                from DyberPet.DyberSettings.BasicSettingUI import (
-                    get_latest_version, compare_versions)
-                success, github_version = get_latest_version()
-                if success and github_version:
-                    if compare_versions(settings.VERSION, github_version):
-                        # 跨线程用 Signal 回主线程弹窗（自动排队到主线程事件循环）
-                        self.updateReminderSignal.emit(github_version)
-                # 已是最新或检测失败：保持静默，不打扰用户
-            except Exception as e:
-                print('[AutoCheckUpdate]', repr(e))
-        threading.Thread(target=_worker, daemon=True).start()
-
-    def _showUpdateReminder(self, github_version):
-        """（主线程）弹出醒目「发现新版本」提醒框。"""
-        try:
-            box = QMessageBox(self)
-            box.setIcon(QMessageBox.Information)
-            box.setWindowTitle('发现新版本')
-            box.setText('检测到新版本 %s，是否前往更新？' % github_version)
-            box.setInformativeText(
-                '安装包将自动下载并静默安装，完成后会自动重启，你的存档数据会保留。')
-            box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-            box.setButtonText(QMessageBox.Yes, '前往更新')
-            box.setButtonText(QMessageBox.No, '稍后')
-            box.setDefaultButton(QMessageBox.Yes)
-            if box.exec() == QMessageBox.Yes:
-                self._open_update_flow()
-        except Exception as e:
-            print('[AutoCheckUpdate] reminder failed:', repr(e))
-
-    def _open_update_flow(self):
-        """打开设置面板并触发「检查更新」，复用已有的「确认后下载安装」流程。
-        若面板不可用则退而求其次打开发布页。"""
-        try:
-            app = QApplication.instance()
-            if app is None:
-                raise RuntimeError('no QApplication')
-            # 打开（或聚焦）设置面板
-            self.show_controlPanel.emit()
-            # 等面板展示后再触发检查更新，弹出「是否下载并安装」确认框
-            def _trigger():
-                try:
-                    if getattr(app, 'conp', None) is not None:
-                        app.conp.settingInterface._onCheckUpdateClicked()
-                    else:
-                        webbrowser.open(settings.RELEASE_URL)
-                except Exception as e:
-                    print('[AutoCheckUpdate] trigger check failed:', repr(e))
-                    webbrowser.open(settings.RELEASE_URL)
-            QTimer.singleShot(400, _trigger)
-        except Exception as e:
-            print('[AutoCheckUpdate] open update flow failed:', repr(e))
-            try:
-                webbrowser.open(settings.RELEASE_URL)
-            except Exception:
-                pass
 
     def _setup_compensate(self):
         self._stop_compensate()
@@ -1387,9 +1318,10 @@ class PetWidget(QWidget):
         self.inventory_window.use_item_inven.connect(self.use_item)
         self.inventory_window.item_note.connect(self.register_notification)
         self.inventory_window.item_anim.connect(self.item_drop_anim)
-        self.addCoins.connect(self.inventory_window.addCoins)
-        self.addItem_toInven.connect(self.inventory_window.add_items)
-        self.fvlvl_changed_main_inve.connect(self.inventory_window.fvchange)
+        # 掉落/金币/升级奖励统一交给 Dashboard 背包处理，避免与 extra_windows.Inventory 重复
+        # self.addCoins.connect(self.inventory_window.addCoins)
+        # self.addItem_toInven.connect(self.inventory_window.add_items)
+        # self.fvlvl_changed_main_inve.connect(self.inventory_window.fvchange)
 
 
     def _set_menu(self, pets=()):
@@ -2338,6 +2270,13 @@ class PetWidget(QWidget):
         self.addItem_toInven.emit(n_items, item_names)
 
     def patpat(self):
+        # 防抖：避免单次点击因事件重复触发导致多次掉落（200ms 内只响应一次）
+        import time
+        now = time.time()
+        if now - getattr(self, '_last_patpat_time', 0) < 0.2:
+            return
+        self._last_patpat_time = now
+
         # 自娱自乐或 land 动画播放期间，跳过动画触发，但保留金币和爱心
         if not self.is_entertainment_playing and not self.is_land_anim_playing:
             # 摸摸动画
@@ -2393,7 +2332,10 @@ class PetWidget(QWidget):
             # 动态物品掉落概率：基础 8% + 每级好感度 +2%，上限 25%
             pp_item = max(0.75, 0.92 - settings.pet_data.fv_lvl * 0.02)
             if prob_num_0 > pp_item:
-                self.addItem_toInven.emit(1, [])
+                # 先随机选出要掉落的物品，再带名字发射，避免多个背包各自随机导致不一致
+                if sum(self.inventory_window.all_probs) > 0:
+                    item_name = random.choices(self.inventory_window.all_items, weights=self.inventory_window.all_probs, k=1)[0]
+                    self.addItem_toInven.emit(1, [item_name])
 
         if prob_num_0 > sys_pp_audio:
             #随机语音

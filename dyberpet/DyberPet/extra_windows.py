@@ -2518,6 +2518,15 @@ class Inventory(QWidget):
         if sum(self.all_probs) <= 0:
             return
 
+        if item_names:
+            # 使用调用方指定的物品列表（避免多个背包各自随机导致不一致）
+            items_toadd = {}
+            for item_name in item_names:
+                items_toadd[item_name] = items_toadd.get(item_name, 0) + 1
+            for item_name, count in items_toadd.items():
+                self.add_item(item_name, count)
+            return
+
         # 随机物品
         item_names_pendding = []
         for i in range(n_items):
@@ -2528,18 +2537,14 @@ class Inventory(QWidget):
             else:
                 item_names_pendding.append(item)
 
-        # 物品添加列表
+        # 合并同名物品数量后依次添加
         items_toadd = {}
-        for i in range(len(item_names_pendding)):
-            item_name = item_names_pendding[int(i%len(item_names_pendding))]
-            if item_name in items_toadd.keys():
-                items_toadd[item_name] += 1
-            else:
-                items_toadd[item_name] = 1
+        for item_name in item_names_pendding:
+            items_toadd[item_name] = items_toadd.get(item_name, 0) + 1
 
         # 依次添加物品
-        for item in items_toadd.keys():
-            self.add_item(item, items_toadd[item])
+        for item_name, count in items_toadd.items():
+            self.add_item(item_name, count)
 
     def compensate_rewards(self):
         for fv_lvl in range(settings.pet_data.fv_lvl+1):

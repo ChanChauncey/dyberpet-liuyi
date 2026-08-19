@@ -143,9 +143,15 @@ def is_program_running():
     """检测桌宠主程序(六一桌宠.exe)是否正在运行。"""
     name = APP_NAME + ".exe"
     try:
+        # 隐藏子进程控制台窗口，避免检测时弹出黑框
+        _si = subprocess.STARTUPINFO()
+        _si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        _si.wShowWindow = subprocess.SW_HIDE
         out = subprocess.check_output(
             ["tasklist", "/FI", "IMAGENAME eq " + name],
             stderr=subprocess.DEVNULL, timeout=10,
+            startupinfo=_si,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         # 中文 Windows 控制台多为 gbk/cp936，多编码兜底解码
         text = None
@@ -166,10 +172,16 @@ def kill_program():
     """强制结束桌宠主程序，返回是否成功。"""
     name = APP_NAME + ".exe"
     try:
+        # 隐藏子进程控制台窗口，避免关闭旧实例时弹出黑框
+        _si = subprocess.STARTUPINFO()
+        _si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        _si.wShowWindow = subprocess.SW_HIDE
         r = subprocess.run(
             ["taskkill", "/F", "/IM", name],
             capture_output=True, text=True, encoding="utf-8", errors="ignore",
             timeout=10,
+            startupinfo=_si,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         return r.returncode == 0
     except Exception:
@@ -316,6 +328,13 @@ class InstallWorker(QThread):
     def run(self):
         try:
             dst = self.dst
+            # 升级/重装前先关闭正在运行的旧实例，避免其锁定 exe 导致覆盖失败
+            if is_program_running():
+                self.progress.emit(0, "关闭正在运行的旧版本...")
+                kill_program()
+                # 等待 Windows 释放文件锁
+                import time
+                time.sleep(1.5)
             # 重装时可选保留原有存档(等级/好感度/背包等)
             saved = {}
             if self.opts.get("keepdata") and os.path.isdir(dst):
@@ -487,13 +506,13 @@ class OptionsPage(Page):
         t.setObjectName("Title")
         self.layout.addWidget(t)
         self.cb_desktop = QCheckBox("创建桌面快捷方式", self)
-        self.cb_startmenu = QCheckBox("创建开始菜单快捷方式(含卸载)", self)
+        self.cb_startmenu = QCheckBox("创建开始菜单快捷方式", self)
         self.cb_keepdata = QCheckBox("保留原有游戏数据", self)
         self.cb_autostart = QCheckBox("开机自动启动", self)
         self.cb_desktop.setChecked(True)
         self.cb_startmenu.setChecked(True)
         self.cb_keepdata.setChecked(True)
-        self.cb_autostart.setChecked(False)
+        self.cb_autostart.setChecked(True)
         for cb in (self.cb_desktop, self.cb_startmenu,
                    self.cb_keepdata, self.cb_autostart):
             self.layout.addWidget(cb)
@@ -646,8 +665,9 @@ class MainWindow(QWidget):
 
     def update_nav(self):
         i = self.stack.currentIndex()
-        self.btn_back.setVisible(i > 0 and i < 5)
-        self.btn_cancel.setVisible(i < 5)
+        self.btn_back.setVisible(i > 0 and i < 4)
+        # 安装过程中(i==4)禁止取消/上一步，必须等安装完成
+        self.btn_cancel.setVisible(i < 4)
         if i < 3:
             self.btn_next.setText("下一步")
             self.btn_next.setVisible(True)
@@ -657,7 +677,7 @@ class MainWindow(QWidget):
         else:
             self.btn_next.setVisible(False)
         # 非完成页：确保“取消”按钮回到导航栏左侧首位
-        if i < 5 and self.nav.indexOf(self.btn_cancel) != 0:
+        if i < 4 and self.nav.indexOf(self.btn_cancel) != 0:
             self.nav.removeWidget(self.btn_cancel)
             self.nav.insertWidget(0, self.btn_cancel)
 

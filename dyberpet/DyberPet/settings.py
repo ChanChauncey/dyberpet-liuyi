@@ -43,7 +43,7 @@ DEFAULT_THEME_COL = "#009faa"
 HELP_URL = "https://github.com/ChaozhongLiu/DyberPet/issues"
 PROJECT_URL = "https://github.com/ChaozhongLiu/DyberPet"
 DEVDOC_URL = "https://github.com/ChaozhongLiu/DyberPet/blob/main/docs/art_dev.md"
-VERSION = "v1.0.4"
+VERSION = "v1.0.11"
 AUTHOR = "https://github.com/ChaozhongLiu"
 CHARCOLLECT_LINK = "https://github.com/ChaozhongLiu/DyberPet/blob/main/docs/collection.md"
 ITEMCOLLECT_LINK = "https://github.com/ChaozhongLiu/DyberPet/blob/main/docs/collection.md"
@@ -396,7 +396,7 @@ def init_settings():
             usertag_dict[pet] = usertag
 
         # v0.6.5 stop HP & FV changes when screen locked
-        auto_lock = data_params.get('auto_lock', False)
+        auto_lock = data_params.get('auto_lock', True)
         #=====================================================
 
         # v0.6.7 Bubble can be turned off
@@ -426,7 +426,7 @@ def init_settings():
         toaster_on = True
         bubble_on = True
         usertag_dict = {}
-        auto_lock = False
+        auto_lock = True
         poop_enabled = True
     check_locale()
     save_settings()
