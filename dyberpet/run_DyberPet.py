@@ -161,6 +161,11 @@ class DyberPetApp(QApplication):
         self.conp = None
         self.board = DashboardMainWindow()
         self._connect_board_signals()
+        # 让 patpat 从 Dashboard 背包的【实时】掉落池选物。
+        # 老背包 extra_windows.Inventory 的掉落/金币/升级奖励信号已断开，其 all_probs
+        # 在启动后冻结；若 patpat 继续读它，会话中收集过收藏品后仍会重复掉落已收集物品。
+        # Dashboard 背包的 all_probs 在 add_items(收集品)/fvchange 时会实时重算，故用它。
+        self.p.live_drop_pool = self.board.backpackInterface
 
         # Midnight Timer
         self.current_date = QDate.currentDate()

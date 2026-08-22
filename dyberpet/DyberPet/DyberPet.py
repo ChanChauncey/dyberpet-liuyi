@@ -42,9 +42,8 @@ configdir = settings.CONFIGDIR
 
 # version
 dyberpet_version = settings.VERSION
-vf = open(os.path.join(configdir,'data/version'), 'w')
-vf.write(dyberpet_version)
-vf.close()
+with open(os.path.join(configdir,'data/version'), 'w') as vf:
+    vf.write(dyberpet_version)
 
 # some UI size parameters
 status_margin = int(3)
@@ -1372,7 +1371,8 @@ class PetWidget(QWidget):
         '''
         web_file = os.path.join(basedir, 'res/role/sys/webs.json')
         if os.path.isfile(web_file):
-            web_dict = json.load(open(web_file, 'r', encoding='UTF-8'))
+            with open(web_file, 'r', encoding='UTF-8') as _f:
+                web_dict = json.load(_f)
 
             self.web_menu = RoundMenu(self.tr("Website"), menu)
             self.web_menu.setIcon(QIcon(os.path.join(basedir,'res/icons/website.svg')))
@@ -1808,7 +1808,8 @@ class PetWidget(QWidget):
         import glob as _glob, re as _re, os as _os, json as _json
         _img_dir = _os.path.join(basedir, 'res/role/{}/action'.format(self.curr_pet_name))
         _act_conf_path = _os.path.join(basedir, 'res/role/{}/act_conf.json'.format(self.curr_pet_name))
-        _act_conf = _json.load(open(_act_conf_path, 'r', encoding='UTF-8'))
+        with open(_act_conf_path, 'r', encoding='UTF-8') as _f:
+                    _act_conf = json.load(_f)
         _default_prefix = _act_conf.get(self.pet_conf.default.act_name, {}).get('images', 'stand')
         _default_files = _glob.glob(f'{_img_dir}/{_default_prefix}_*.png')
         if _default_files:
@@ -1903,23 +1904,26 @@ class PetWidget(QWidget):
 
         settings.previous_img = settings.current_img
         # 启动首帧显示 fallasleep_wake 第一帧，与紧随其后的启动醒来动画衔接
+        # 只加载第一帧（first_pixmap），不在主线程同步加载整组帧，避免启动动画卡顿
         _wake_act = self.pet_conf.act_dict.get('fallasleep_wake')
-        _first_pixmap = _wake_act.images[0] if _wake_act else self.pet_conf.default.images[0]
+        _first_pixmap = _wake_act.first_pixmap() if _wake_act else None
+        if _first_pixmap is None:
+            _first_pixmap = self.pet_conf.default.first_pixmap()
         if settings.tunable_scale != 1:
             _first_pixmap = _first_pixmap.scaled(int(_first_pixmap.width() * settings.tunable_scale),
-                                                  int(_first_pixmap.height() * settings.tunable_scale),
-                                                  aspectMode=Qt.KeepAspectRatio,
-                                                  mode=Qt.SmoothTransformation)
+                                                 int(_first_pixmap.height() * settings.tunable_scale),
+                                                 aspectMode=Qt.KeepAspectRatio,
+                                                 mode=Qt.SmoothTransformation)
         settings.current_img = _first_pixmap
         settings.previous_anchor = [0, 0]
         settings.current_anchor = [int(i*settings.tunable_scale) for i in self.pet_conf.default.anchor]
         self.set_img()
         self.border = self.pet_conf.width/2
 
-        # 预加载 fallasleep_wake（启动醒来动画必需）
+        # 后台预加载 fallasleep_wake（启动醒来动画必需）：移到子线程，避免主线程同步加载整组帧造成卡顿
         wake_act = self.pet_conf.act_dict.get('fallasleep_wake')
         if wake_act is not None:
-            _ = wake_act.images
+            threading.Thread(target=wake_act.preload, daemon=True).start()
 
         # 启动后台预加载：醒来动画播放期间加载其余全部动作（由 runAnimation 中的 QTimer 触发）
 
@@ -2328,14 +2332,19 @@ class PetWidget(QWidget):
             # Drop random amount of coins
             self.addCoins.emit(0)
 
-        else:
-            # 动态物品掉落概率：基础 8% + 每级好感度 +2%，上限 25%
-            pp_item = max(0.75, 0.92 - settings.pet_data.fv_lvl * 0.02)
-            if prob_num_0 > pp_item:
-                # 先随机选出要掉落的物品，再带名字发射，避免多个背包各自随机导致不一致
-                if sum(self.inventory_window.all_probs) > 0:
-                    item_name = random.choices(self.inventory_window.all_items, weights=self.inventory_window.all_probs, k=1)[0]
-                    self.addItem_toInven.emit(1, [item_name])
+        # 物品掉落：与心心/金币【独立】判定，每次有效点击都有固定概率掉物。
+        # 基础概率 PP_ITEM + 好感度加成（每级 PP_ITEM_PER_FV），封顶 PP_ITEM_MAX。
+        # 不再被心/金币区间挤占，也不因旧死逻辑卡在 8%~10%。
+        pp_item_drop = min(settings.PP_ITEM_MAX,
+                           settings.PP_ITEM + settings.pet_data.fv_lvl * settings.PP_ITEM_PER_FV)
+        if random.uniform(0, 1) < pp_item_drop:
+            # 先随机选出要掉落的物品，再带名字发射，避免多个背包各自随机导致不一致。
+            # 优先用 Dashboard 背包的【实时】掉落池（live_drop_pool，由 run_DyberPet 注入）；
+            # 缺失时回退老背包 inventory_window（其池启动后冻结，仅作兜底）。
+            pool = getattr(self, 'live_drop_pool', None) or self.inventory_window
+            if sum(pool.all_probs) > 0:
+                item_name = random.choices(pool.all_items, weights=pool.all_probs, k=1)[0]
+                self.addItem_toInven.emit(1, [item_name])
 
         if prob_num_0 > sys_pp_audio:
             #随机语音

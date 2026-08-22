@@ -70,11 +70,13 @@ class BubbleManager(QObject):
     def load_bubble_config(self) -> dict:
         system_conf_file = os.path.join(basedir, 'res/icons/bubble_conf.json')
         pet_bb_conf_file = os.path.join(basedir, f'res/role/{settings.petname}/note/bubble_conf.json')
-        bubble_conf = dict(json.load(open(system_conf_file, 'r', encoding='UTF-8')))
+        with open(system_conf_file, 'r', encoding='UTF-8') as _f:
+                    bubble_conf = json.load(_f)
 
         # Load any changes made in pet config
         if os.path.exists(pet_bb_conf_file):
-            pet_bb_conf = dict(json.load(open(pet_bb_conf_file, 'r', encoding='UTF-8')))
+            with open(pet_bb_conf_file, 'r', encoding='UTF-8') as _f:
+                            pet_bb_conf = json.load(_f)
             # Default buble type config changes
             for k in bubble_conf.keys():
                 if k in pet_bb_conf.keys():

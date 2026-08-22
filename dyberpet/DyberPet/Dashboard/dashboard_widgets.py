@@ -256,13 +256,14 @@ class StatusCard(SimpleCardWidget):
         info_file = os.path.join(basedir, 'res/role', self.petname, 'info', 'info.json')
         pfp_file = None
         if os.path.exists(info_file):
-            info = json.load(open(info_file, 'r', encoding='UTF-8'))
+            with open(info_file, 'r', encoding='UTF-8') as _f:
+                            info = json.load(_f)
             pfp_file = info.get('pfp', None)
 
         if pfp_file is None:
             # use the first image of default action
-            actJson = json.load(open(os.path.join(basedir, 'res/role', self.petname, 'act_conf.json'),
-                                'r', encoding='UTF-8'))
+            with open(os.path.join(basedir, 'res/role', self.petname, 'act_conf.json'), 'r', encoding='UTF-8') as _f:
+                            actJson = json.load(_f)
             pfp_file = f"{actJson['default']['images']}_0.png"
             pfp_file = os.path.join(basedir, 'res/role', self.petname, 'action', pfp_file)
         else:
@@ -792,6 +793,7 @@ class PetItemWidget(QLabel):
     Ii_selected = Signal(int, bool, name="Ii_selected")
     Ii_removed = Signal(int, name="Ii_removed")
     Ii_pressed = Signal(int, bool, name="Ii_pressed")
+    Ii_double_clicked = Signal(int, name="Ii_double_clicked")
 
     '''Single Item Widget
     
@@ -886,15 +888,19 @@ class PetItemWidget(QLabel):
                 self.Ii_selected.emit(self.cell_index, self.item_inuse)
                 self._setQss(self.item_type)
             
-            self.isPressed = False
-            self.Ii_pressed.emit(self.cell_index, self.isPressed)
-            
-        
+                self.isPressed = False
+                self.Ii_pressed.emit(self.cell_index, self.isPressed)
+                
+
+    def mouseDoubleClickEvent(self, e):
+            if e.button() == Qt.LeftButton and self.item_config is not None:
+                self.Ii_double_clicked.emit(self.cell_index)
+
     def _forwardMouseEvent(self, e: QMouseEvent):
-        pos = self.mapToParent(e.pos())
-        event = QMouseEvent(e.type(), pos, e.button(),
-                            e.buttons(), e.modifiers())
-        QApplication.sendEvent(self.parent(), event)
+            pos = self.mapToParent(e.pos())
+            event = QMouseEvent(e.type(), pos, e.button(),
+                                e.buttons(), e.modifiers())
+            QApplication.sendEvent(self.parent(), event)
 
 
     def paintEvent(self, event):
@@ -1058,6 +1064,7 @@ class itemTabWidget(QWidget):
         self.cells_dict[index_item].Ii_selected.connect(self.change_selected)
         self.cells_dict[index_item].Ii_removed.connect(self.item_removed)
         self.cells_dict[index_item].Ii_pressed.connect(self.item_pressed)
+        self.cells_dict[index_item].Ii_double_clicked.connect(self._use_item_at)
         self.cardLayout.addWidget(self.cells_dict[index_item])
         self.adjustSize()
 
@@ -1155,14 +1162,14 @@ class itemTabWidget(QWidget):
             self.rmBuff.emit(item_name)
 
 
-    def _confirmClicked(self, tab_index):
-        if self.tab_index != tab_index:
+    def _use_item_at(self, index):
+        """对指定 index 的物品执行「使用」逻辑——单击「使用」按钮与双击共用。"""
+        cell = self.cells_dict.get(index)
+        if cell is None or cell.item_config is None:
             return
-        
-        if self.selected_cell is None: #无选择
+        item_name_selected = cell.item_name
+        if item_name_selected == 'None':
             return
-
-        item_name_selected = self.cells_dict[self.selected_cell].item_name
 
         # Check if the item is character-specific
         if len(self.items_data.item_dict[item_name_selected]['pet_limit']) != 0:
@@ -1188,46 +1195,32 @@ class itemTabWidget(QWidget):
                 return
 
             # Item can be used --------
-            # Change pet_data
             settings.pet_data.change_item(item_name_selected, item_change=-1)
             self.item_num_changed.emit(item_name_selected)
 
-            # Signal to item label
-            #self.cells_dict[self.selected_cell].unselected()
-            self.cells_dict[self.selected_cell].consumeItem()
+            cell.consumeItem()
 
             # signal to act feed animation
             self.use_item_inven.emit(item_name_selected)
             self.item_note.emit(item_name_selected, '[%s] -1'%item_name_selected)
 
-            # change button
-            #self.selected_cell = None
-            #self.changeButton()
-
         elif self.items_data.item_dict[item_name_selected]['item_type'] == 'collection':
-            #print('collection used')
-            #self.cells_dict[self.selected_cell].unselected()
-            self.cells_dict[self.selected_cell].consumeItem()
+            cell.consumeItem()
             self.use_item_inven.emit(item_name_selected)
-            #self.selected_cell = None
-            self.changeButton(self.cells_dict[self.selected_cell].item_inuse)
+            self.changeButton(cell.item_inuse)
 
         elif self.items_data.item_dict[item_name_selected]['item_type'] == 'dialogue':
-            #print('collection used')
-            #self.cells_dict[self.selected_cell].unselected()
             self.use_item_inven.emit(item_name_selected)
-            #self.selected_cell = None
-            #self.changeButton()
 
         elif self.items_data.item_dict[item_name_selected]['item_type'] == 'subpet':
-            self.cells_dict[self.selected_cell].consumeItem()
+            cell.consumeItem()
             self.use_item_inven.emit(item_name_selected)
-            self.changeButton(self.cells_dict[self.selected_cell].item_inuse)
+            self.changeButton(cell.item_inuse)
         
         # Buff-related operation
         if self.items_data.item_dict[item_name_selected]['buff']:
             if self.items_data.item_dict[item_name_selected]['item_type'] in ['subpet','collection']:
-                if self.cells_dict[self.selected_cell].item_inuse:
+                if cell.item_inuse:
                     self.addBuff.emit(item_name_selected)
                 else:
                     self.rmBuff.emit(item_name_selected)
@@ -1235,6 +1228,15 @@ class itemTabWidget(QWidget):
                 self.addBuff.emit(item_name_selected)
 
         return
+
+    def _confirmClicked(self, tab_index):
+        if self.tab_index != tab_index:
+            return
+        
+        if self.selected_cell is None: #无选择
+            return
+
+        self._use_item_at(self.selected_cell)
 
 
     def add_item(self, item_name, n_items):
@@ -1506,6 +1508,7 @@ class itemTabWidget(QWidget):
             widget.Ii_selected.connect(self.change_selected)
             widget.Ii_removed.connect(self.item_removed)
             widget.Ii_pressed.connect(self.item_pressed)
+            widget.Ii_double_clicked.connect(self._use_item_at)
             self.cells_dict[new_idx] = widget
 
         # 再放空格子
@@ -1517,6 +1520,7 @@ class itemTabWidget(QWidget):
             widget.Ii_selected.connect(self.change_selected)
             widget.Ii_removed.connect(self.item_removed)
             widget.Ii_pressed.connect(self.item_pressed)
+            widget.Ii_double_clicked.connect(self._use_item_at)
             self.cells_dict[idx] = widget
             self.empty_cell.append(idx)
 

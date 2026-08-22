@@ -557,7 +557,8 @@ class QuickSaveCard(SimpleCardWidget):
     def __init_SaveCard(self):
 
         # Load in info
-        info = open(os.path.join(self.jsonPath,'info.txt'),'r', encoding='UTF-8').readlines()
+        with open(os.path.join(self.jsonPath, 'info.txt'), 'r', encoding='UTF-8') as _f:
+                    info = _f.readlines()
         info = [i.strip() for i in info]
         petname = info[0]
 
@@ -579,7 +580,8 @@ class QuickSaveCard(SimpleCardWidget):
         image = QImage()
         infoJson = os.path.join(basedir,'res/role',petname,'info/info.json')
         if os.path.exists(infoJson):
-            infoJson = json.load(open(infoJson, 'r', encoding='UTF-8'))
+            with open(infoJson, 'r', encoding='UTF-8') as _f:
+                            infoJson = json.load(_f)
             pfp_file = infoJson.get('pfp', None)
             if pfp_file is None:
                 pfp_file = os.path.join(basedir,'res/icons/unknown.svg')
@@ -611,7 +613,8 @@ class QuickSaveCard(SimpleCardWidget):
                                       text='lv2: ', color='#F69290',
                                       icon=os.path.join(basedir, 'res/icons/FV_icon.png'))
         '''
-        saveData = json.load(open(os.path.join(self.jsonPath,'pet_data.json'), 'r', encoding='UTF-8'))
+        with open(os.path.join(self.jsonPath, 'pet_data.json'), 'r', encoding='UTF-8') as _f:
+                    saveData = json.load(_f)
         saveData = saveData[petname]
         hp = saveData.get('HP', 'null')
         if hp != 'null': 
@@ -1060,7 +1063,8 @@ class CharLine(SimpleCardWidget):
             self.chrName = self.chrFolder
             pfpPath = os.path.join(basedir,'res/icons/unknown.svg')
         else:
-            infoConfig = json.load(open(infoFile, 'r', encoding='UTF-8'))
+            with open(infoFile, 'r', encoding='UTF-8') as _f:
+                            infoConfig = json.load(_f)
             self.chrName = infoConfig.get("petName", self.chrFolder)
             pfpPath = infoConfig.get("pfp", None)
             if pfpPath:
@@ -1245,7 +1249,8 @@ class CharCardWidget(SimpleCardWidget):
         # Load in json
         self.folderPath = os.path.join(basedir,f'res/{self.parentDir}',self.petFolder)
         self.folderPath = os.path.normpath(self.folderPath)
-        infoConfig = json.load(open(self.jsonPath, 'r', encoding='UTF-8'))
+        with open(self.jsonPath, 'r', encoding='UTF-8') as _f:
+                    infoConfig = json.load(_f)
 
         # Images Display
         self.flipView = CustomHorizontalFlipView(self)
@@ -1450,7 +1455,8 @@ class ItemLine(SimpleCardWidget):
                 pfpPath = os.path.join(basedir,'res/icons/unknown.svg')
 
         else:
-            infoConfig = json.load(open(infoFile, 'r', encoding='UTF-8'))
+            with open(infoFile, 'r', encoding='UTF-8') as _f:
+                            infoConfig = json.load(_f)
             self.modName = infoConfig.get("modName", os.path.basename(self.itemFolder))
             pfpPath = infoConfig.get("pfp", None)
             if pfpPath:
@@ -1626,7 +1632,8 @@ class ItemCardWidget(SimpleCardWidget):
 
         # Load in json
         infoJsonPath = os.path.join(self.itemFolder, 'info.json')
-        infoConfig = json.load(open(infoJsonPath, 'r', encoding='UTF-8'))
+        with open(infoJsonPath, 'r', encoding='UTF-8') as _f:
+                    infoConfig = json.load(_f)
 
         # Items Display
         itemJsonPath = os.path.join(self.itemFolder, 'items_config.json')

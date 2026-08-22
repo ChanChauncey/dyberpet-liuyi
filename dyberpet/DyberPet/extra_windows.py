@@ -607,7 +607,8 @@ class SettingUI(QWidget):
         settings.default_pet = pet_name
         settings.save_settings()
         """
-        pet_list = json.load(open(os.path.join(basedir,'res/role/pets.json'), 'r', encoding='UTF-8'))
+        with open(os.path.join(basedir,'res/role/pets.json'), 'r', encoding='UTF-8') as _f:
+            pet_list = json.load(_f)
         pet_list.remove(pet_name)
         pet_list = [pet_name] + pet_list
         with open(os.path.join(basedir,'res/role/pets.json'), 'w', encoding='utf-8') as f:
@@ -704,7 +705,8 @@ class Tomato(QWidget):
 
         pomodoro_conf = os.path.join(basedir, 'res/icons/Pomodoro.json')
         if os.path.isfile(pomodoro_conf):
-            self.config = json.load(open(pomodoro_conf, 'r', encoding='UTF-8'))
+            with open(pomodoro_conf, 'r', encoding='UTF-8') as _f:
+                            self.config = json.load(_f)
         else:
             self.config = {"title":"番茄钟",
                         "Description": "番茄工作法是一种时间管理方法，该方法使用一个定时器来分割出25分钟的工作时间和5分钟的休息时间，提高效率。",
@@ -1542,15 +1544,13 @@ class Remindme(QWidget):
             self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint)
 
         if os.path.isfile(os.path.join(configdir,'data/remindme.txt')):
-            f = open(os.path.join(configdir,'data/remindme.txt'),'r', encoding='UTF-8')
-            texts = f.read()
-            f.close()
+            with open(os.path.join(configdir,'data/remindme.txt'),'r', encoding='UTF-8') as f:
+                texts = f.read()
             texts = texts.lstrip('\n')
             self.e2.setPlainText(texts)
         else:
-            f = open(os.path.join(configdir,'data/remindme.txt'),'w', encoding='UTF-8')
-            f.write('')
-            f.close()
+            with open(os.path.join(configdir,'data/remindme.txt'),'w', encoding='UTF-8') as f:
+                f.write('')
 
     def mousePressEvent(self, event):
         """
@@ -1585,9 +1585,8 @@ class Remindme(QWidget):
         self.setCursor(QCursor(Qt.ArrowCursor))
 
     def initial_task(self):
-        f = open(os.path.join(configdir,'data/remindme.txt'),'r', encoding='UTF-8')
-        texts = f.readlines()
-        f.close()
+        with open(os.path.join(configdir,'data/remindme.txt'),'r', encoding='UTF-8') as f:
+            texts = f.readlines()
         for line in texts:
             line = line.rstrip('\n')
             if line.startswith(self.tr('#重复')):
@@ -1697,9 +1696,8 @@ class Remindme(QWidget):
 
     def save_remindme(self):
         #print(self.e2.toPlainText()=='')
-        f = open(os.path.join(configdir,'data/remindme.txt'),'w', encoding='UTF-8')
-        f.write(self.e2.toPlainText())
-        f.close()
+        with open(os.path.join(configdir,'data/remindme.txt'),'w', encoding='UTF-8') as f:
+            f.write(self.e2.toPlainText())
 
 
 

@@ -473,6 +473,8 @@ class SettingInterface(ScrollArea):
             return False, self.tr("无法连接 GitHub：请检查网络/代理（需与浏览器一致的出口），或手动查看 ") + settings.RELEASE_URL, [], [], ""
 
     def _onCheckUpdateClicked(self, silent=False):
+        # 记住是否静默（启动自动检测时为 True），供 _showUpdateResult 决定是否弹"无更新"提示
+        self._update_check_silent = silent
         # 网络请求放到后台线程，避免界面卡顿（GitHub 国内访问可能较慢）
         if not silent:
             InfoBar.info(
@@ -512,13 +514,15 @@ class SettingInterface(ScrollArea):
                 parent=self.window()
             )
         else:
-            InfoBar.info(
-                title=self.tr('检查更新'),
-                content=info,
-                duration=4000,
-                position=InfoBarPosition.TOP,
-                parent=self.window()
-            )
+            # 静默模式（启动自动检测）下不弹"无更新"提示，避免打扰用户
+            if not getattr(self, '_update_check_silent', False):
+                InfoBar.info(
+                    title=self.tr('检查更新'),
+                    content=info,
+                    duration=4000,
+                    position=InfoBarPosition.TOP,
+                    parent=self.window()
+                )
 
     def _ask_install_update(self, info, src_urls, full_urls, notes):
         # 从 info 里取出版本号（形如 "v1.0.2  New version available"）

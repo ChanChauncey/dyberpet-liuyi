@@ -214,7 +214,8 @@ class PetConfig:
             # 对话列表
             msg_file = os.path.join(basedir, 'res/role/{}/msg_conf.json'.format(pet_name))
             if os.path.isfile(msg_file):
-                msg_data = dict(json.load(open(msg_file, 'r', encoding='UTF-8')))
+                with open(msg_file, 'r', encoding='UTF-8') as _f:
+                                    msg_data = json.load(_f)
 
                 msg_dict = conf_params.get("msg_dict", {})
                 for msg in msg_dict.keys():
@@ -256,7 +257,8 @@ class PetConfig:
             # 
             # 初始化所有动作（懒加载）
             act_path = os.path.join(basedir, 'res/role/sys/act_conf.json')
-            act_conf = dict(json.load(open(act_path, 'r', encoding='UTF-8')))
+            with open(act_path, 'r', encoding='UTF-8') as _f:
+                            act_conf = json.load(_f)
             act_dict = {}
             act_dict = {k: LazyAct(v, o.scale, 'sys', 'role', k) for k, v in act_conf.items()}
 
@@ -306,7 +308,8 @@ class PetConfig:
 
             # 初始化所有动作
             act_path = os.path.join(basedir, 'res/pet/{}/act_conf.json'.format(pet_name))
-            act_conf = dict(json.load(open(act_path, 'r', encoding='UTF-8')))
+            with open(act_path, 'r', encoding='UTF-8') as _f:
+                            act_conf = json.load(_f)
             act_dict = {}
             act_dict = {k: Act.init_act(v, pic_dict, o.scale, pet_name, 'pet', k) for k, v in act_conf.items()}
 
@@ -410,13 +413,15 @@ def CheckCharFiles(folder):
     # Check pet_conf.json and act_conf.json
     try:
         path = os.path.join(folder, 'pet_conf.json')
-        pet_conf = json.load(open(path, 'r', encoding='UTF-8'))
+        with open(path, 'r', encoding='UTF-8') as _f:
+                    pet_conf = json.load(_f)
     except:
         return 1, None
 
     try:
         path = os.path.join(folder, 'act_conf.json')
-        act_conf = json.load(open(path, 'r', encoding='UTF-8'))
+        with open(path, 'r', encoding='UTF-8') as _f:
+                    act_conf = json.load(_f)
     except:
         return 2, None
 
@@ -648,6 +653,34 @@ class LazyAct:
         if not self._loaded:
             self._load_images()
 
+    def first_pixmap(self):
+        """只加载第一帧用于即时显示，避免主线程同步加载整组帧造成启动卡顿。
+        不标记 _loaded，后续的完整 images 仍会按懒加载在后台线程载入。"""
+        if self._loaded:
+            return self._images[0] if self._images else None
+        images = self._conf_param.get('images')
+        if not images:
+            return None
+        img_dir = os.path.join(basedir, 'res/{}/{}/action'.format(self._resFolder, self._pet_name))
+        list_images = glob.glob(f'{img_dir}/{images}_*.png')
+        pattern = re.compile(rf"^{re.escape(images)}_(\d+)\.png$")
+        matching_idx = sorted(
+            [pattern.match(os.path.basename(file)).group(1) for file in list_images if pattern.match(os.path.basename(file))],
+            key=lambda x: int(x)
+        )
+        if not matching_idx:
+            return None
+        pixmap = QPixmap()
+        pixmap.load(os.path.join(img_dir, f'{images}_{matching_idx[0]}.png'))
+        if pixmap.isNull():
+            return None
+        if self._scale != 1:
+            pixmap = pixmap.scaled(int(pixmap.width() * self._scale),
+                                   int(pixmap.height() * self._scale),
+                                   aspectMode=Qt.KeepAspectRatio,
+                                   mode=Qt.SmoothTransformation)
+        return pixmap
+
     @property
     def frame_start(self):
         return self._frame_start if self._frame_start is not None else 0
@@ -759,7 +792,8 @@ class ActData:
         if os.path.isfile(self.file_path):
             # Check file integrity
             try:
-                allAct_params = json.load(open(self.file_path, 'r', encoding='UTF-8'))
+                with open(self.file_path, 'r', encoding='UTF-8') as _f:
+                                    allAct_params = json.load(_f)
                 self.fileGood = True
             except:
                 #File broken
@@ -789,7 +823,8 @@ class ActData:
 
     def _check_actlist(self, petname, act_params, fv_lvl):
         pet_conf_file = os.path.join(basedir, 'res/role/{}/pet_conf.json'.format(petname))
-        pet_conf = json.load(open(pet_conf_file, 'r', encoding='UTF-8'))
+        with open(pet_conf_file, 'r', encoding='UTF-8') as _f:
+                    pet_conf = json.load(_f)
         all_names_in_conf = []
         for act_conf in pet_conf.get('random_act', []):
             if act_conf['name'] not in act_params:
@@ -829,7 +864,8 @@ class ActData:
 
     def generate_config(self, pet_name, fv_lvl):
         pet_conf_file = os.path.join(basedir, 'res/role', pet_name, 'pet_conf.json')
-        pet_conf = json.load(open(pet_conf_file, 'r', encoding='UTF-8'))
+        with open(pet_conf_file, 'r', encoding='UTF-8') as _f:
+                    pet_conf = json.load(_f)
         act_params = {}
         for actset in pet_conf.get("random_act", []):
             act_params[actset['name']] = self._get_act_config(actset, "random_act", fv_lvl)
@@ -905,7 +941,8 @@ class PetData:
         if os.path.isfile(self.file_path):
             # Check file integrity
             try:
-                allData_params = json.load(open(self.file_path, 'r', encoding='UTF-8'))
+                with open(self.file_path, 'r', encoding='UTF-8') as _f:
+                                    allData_params = json.load(_f)
                 self.saveGood = True
             except:
                 #File broken (seen by a few users)
@@ -1302,7 +1339,8 @@ class TaskData:
         if os.path.isfile(self.file_path):
             # Check file integrity
             try:
-                self.taskData = json.load(open(self.file_path, 'r', encoding='UTF-8'))
+                with open(self.file_path, 'r', encoding='UTF-8') as _f:
+                                    self.taskData = json.load(_f)
                 self.stateGood = True
             except:
                 #File broken (seen by a few users)
@@ -1455,14 +1493,16 @@ class ItemData:
 
             info_file = os.path.join(itemFolder, 'info.json')
             if os.path.exists(info_file):
-                info = dict(json.load(open(info_file, 'r', encoding='UTF-8')))
+                with open(info_file, 'r', encoding='UTF-8') as _f:
+                                    info = json.load(_f)
                 modName = info.get('modName', None)
             else:
                 modName = None
             if not modName:
                 modName = os.path.basename(itemFolder)
 
-            item_conf = dict(json.load(open(conf_file, 'r', encoding='UTF-8')))
+            with open(conf_file, 'r', encoding='UTF-8') as _f:
+                            item_conf = json.load(_f)
             MOD_dict = {k: self.init_item(v, k, itemFolder, modName) for k, v in item_conf.items()}
             mod_configs.append(MOD_dict)
 
@@ -1569,12 +1609,14 @@ class ItemData:
 def load_ItemMod(configPath, HUNGERSTR='Satiety', FAVORSTR='Favorability'):
     """ Load item configuration """
     
-    item_conf = dict(json.load(open(configPath, 'r', encoding='UTF-8')))
+    with open(configPath, 'r', encoding='UTF-8') as _f:
+            item_conf = json.load(_f)
     itemFolder = os.path.dirname(configPath)
 
     info_file = os.path.join(itemFolder, 'info.json')
     if os.path.exists(info_file):
-        info = dict(json.load(open(info_file, 'r', encoding='UTF-8')))
+        with open(info_file, 'r', encoding='UTF-8') as _f:
+                    info = json.load(_f)
         modName = info.get('modName', None)
     else:
         modName = None
@@ -1675,7 +1717,8 @@ def checkItemMOD(itemFolder):
     # Load config file
     configFile = os.path.join(itemFolder,'items_config.json')
     try:
-        item_dict = dict(json.load(open(configFile, 'r', encoding='UTF-8')))
+        with open(configFile, 'r', encoding='UTF-8') as _f:
+                    item_dict = json.load(_f)
     except:
         return 1, None
 

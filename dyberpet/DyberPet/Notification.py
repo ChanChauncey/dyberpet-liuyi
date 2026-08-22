@@ -71,13 +71,16 @@ class DPNote(QWidget):
         """
         super(DPNote, self).__init__(parent)
 
-        sys_note_conf = dict(json.load(open(os.path.join(basedir, 'res/icons/note_icon.json'), 'r', encoding='UTF-8')))
+        with open(os.path.join(basedir, 'res/icons/note_icon.json'), 'r', encoding='UTF-8') as _f:
+                    sys_note_conf = json.load(_f)
         try:
-            pet_note_conf = dict(json.load(open(os.path.join(basedir, 'res/role/{}/note/note.json'.format(settings.petname)), 'r', encoding='UTF-8')))
+            with open(os.path.join(basedir, 'res/role/{}/note/note.json'.format(settings.petname)), 'r', encoding='UTF-8') as _f:
+                            pet_note_conf = json.load(_f)
         except:
             pet_note_conf = {}
         self.icon_dict, self.sound_dict = self.init_note(sys_note_conf, pet_note_conf)
-        pet_cof = dict(json.load(open(os.path.join(basedir, 'res/role/{}/pet_conf.json'.format(settings.petname)), 'r', encoding='UTF-8')))
+        with open(os.path.join(basedir, 'res/role/{}/pet_conf.json'.format(settings.petname)), 'r', encoding='UTF-8') as _f:
+                    pet_cof = json.load(_f)
         self.item_favorite = pet_cof.get('item_favorite', [])
         self.item_dislike = pet_cof.get('item_dislike', [])
 
@@ -174,14 +177,17 @@ class DPNote(QWidget):
         self._close_all_bubbles()
 
         # update note ui configuration
-        sys_note_conf = dict(json.load(open(os.path.join(basedir, 'res/icons/note_icon.json'), 'r', encoding='UTF-8')))
+        with open(os.path.join(basedir, 'res/icons/note_icon.json'), 'r', encoding='UTF-8') as _f:
+                    sys_note_conf = json.load(_f)
         try:
-            pet_note_conf = dict(json.load(open(os.path.join(basedir, 'res/role/{}/note/note.json'.format(settings.petname)), 'r', encoding='UTF-8')))
+            with open(os.path.join(basedir, 'res/role/{}/note/note.json'.format(settings.petname)), 'r', encoding='UTF-8') as _f:
+                            pet_note_conf = json.load(_f)
         except:
             pet_note_conf = {}
         self.icon_dict, self.sound_dict = self.init_note(sys_note_conf, pet_note_conf)
 
-        pet_cof = dict(json.load(open(os.path.join(basedir, 'res/role/{}/pet_conf.json'.format(settings.petname)), 'r', encoding='UTF-8')))
+        with open(os.path.join(basedir, 'res/role/{}/pet_conf.json'.format(settings.petname)), 'r', encoding='UTF-8') as _f:
+                    pet_cof = json.load(_f)
         self.item_favorite = pet_cof.get('item_favorite', [])
         self.item_dislike = pet_cof.get('item_dislike', [])
 

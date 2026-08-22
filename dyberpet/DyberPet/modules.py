@@ -1161,7 +1161,8 @@ class Scheduler_worker(QObject):
         ''' Customized Pomodoro function deleted from v0.3.7
         pomodoro_conf = os.path.join(basedir, 'res/icons/Pomodoro.json')
         if os.path.isfile(pomodoro_conf):
-            self.tm_config = json.load(open(pomodoro_conf, 'r', encoding='UTF-8'))
+            with open(pomodoro_conf, 'r', encoding='UTF-8') as _f:
+                self.tm_config = json.load(_f)
         else:
             self.tm_config = {"title":"番茄钟",
                         "Description": "番茄工作法是一种时间管理方法，该方法使用一个定时器来分割出25分钟的工作时间和5分钟的休息时间，提高效率。",
@@ -1189,7 +1190,7 @@ class Scheduler_worker(QObject):
 
         self.scheduler = QtScheduler()
         #self.scheduler.add_job(self.change_hp, 'interval', minutes=self.pet_conf.hp_interval)
-        self.scheduler.add_job(self.change_hp, interval.IntervalTrigger(minutes=1)) #self.pet_conf.hp_interval))
+        self.scheduler.add_job(self.change_hp, interval.IntervalTrigger(minutes=settings.HP_DECAY_MINUTES)) #self.pet_conf.hp_interval))
         #self.scheduler.add_job(self.change_em, 'interval', minutes=self.pet_conf.em_interval)
         self.scheduler.add_job(self.change_fv, interval.IntervalTrigger(minutes=1)) #self.pet_conf.fv_interval))
         # 自然唤醒定时器（每分钟检查一次，20% 概率唤醒，期望 5 分钟）

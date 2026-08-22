@@ -43,7 +43,7 @@ DEFAULT_THEME_COL = "#009faa"
 HELP_URL = "https://github.com/ChaozhongLiu/DyberPet/issues"
 PROJECT_URL = "https://github.com/ChaozhongLiu/DyberPet"
 DEVDOC_URL = "https://github.com/ChaozhongLiu/DyberPet/blob/main/docs/art_dev.md"
-VERSION = "v1.0.11"
+VERSION = "v1.0.12"
 AUTHOR = "https://github.com/ChaozhongLiu"
 CHARCOLLECT_LINK = "https://github.com/ChaozhongLiu/DyberPet/blob/main/docs/collection.md"
 ITEMCOLLECT_LINK = "https://github.com/ChaozhongLiu/DyberPet/blob/main/docs/collection.md"
@@ -59,13 +59,18 @@ UPDATE_NEEDED = False
 HP_TIERS = [0,20,70,100]
 TIER_NAMES = ['Starving', 'Hungry', 'Normal', 'Energetic']
 HP_INTERVAL = 2
+# 饱食度自然衰减间隔（分钟）：调度器每这么多分钟自动掉 1 点饱食度。
+# 数值越大掉得越慢（1=原速，3=原速的 1/3，5=原速的 1/5）。验收后想调快慢改这里即可。
+HP_DECAY_MINUTES = 3
 LVL_BAR_V1 = [20, 120, 300, 600, 1200, 1800, 2400, 3200]
 LVL_BAR = [20] + [120]*200
 PP_HEART = 0.8
 PP_COIN = 0.9
 COIN_MU = 10
 COIN_SIGMA = 5
-PP_ITEM = 0.95
+PP_ITEM = 0.3           # 点击宠物掉落物品的基础概率（好感度 0 时）。数值越大越容易掉物。
+PP_ITEM_PER_FV = 0.02   # 好感度每升 1 级，掉落概率额外 +2%
+PP_ITEM_MAX = 0.6       # 掉落概率上限（封顶 60%）
 PP_AUDIO = 0.8
 PP_BUBBLE = 0.15
 
@@ -237,7 +242,8 @@ def init():
 
     # Translations ====================================================
     global lang_dict
-    lang_dict = json.load(open(os.path.join(basedir, 'res/language/language.json'), 'r', encoding='UTF-8'))
+    with open(os.path.join(basedir, 'res/language/language.json'), 'r', encoding='UTF-8') as _f:
+            lang_dict = json.load(_f)
 
     # Settings =========================================================
     pets = get_petlist(os.path.join(basedir, 'res/role'))
@@ -317,7 +323,8 @@ def init_settings():
 
     # check json file integrity
     try:
-        json.load(open(file_path, 'r', encoding='UTF-8'))
+        with open(file_path, 'r', encoding='UTF-8') as _f:
+            json.load(_f)
         settingGood = True
     except:
         if os.path.isfile(file_path):
@@ -326,7 +333,8 @@ def init_settings():
             settingGood = True
 
     if os.path.isfile(file_path) and settingGood:
-        data_params = json.load(open(file_path, 'r', encoding='UTF-8'))
+        with open(file_path, 'r', encoding='UTF-8') as _f:
+                    data_params = json.load(_f)
 
         fixdragspeedx, fixdragspeedy = data_params['fixdragspeedx'], data_params['fixdragspeedy']
         gravity = data_params['gravity']
@@ -512,7 +520,8 @@ def save_taskbar_feet_gap(gap):
     global taskbar_feet_gap
     taskbar_feet_gap = int(gap)
     file_path = os.path.join(os.path.dirname(__file__), 'settings.py')
-    lines = open(file_path, 'r', encoding='utf-8').readlines()
+    with open(file_path, 'r', encoding='utf-8') as _f:
+            lines = _f.readlines()
     for i, line in enumerate(lines):
         if line.strip().startswith('taskbar_feet_gap'):
             lines[i] = f'taskbar_feet_gap = {int(gap)}\n'
@@ -526,7 +535,8 @@ def save_floor_offset(offset):
     global floor_y_offset
     floor_y_offset = int(offset)
     file_path = os.path.join(os.path.dirname(__file__), 'settings.py')
-    lines = open(file_path, 'r', encoding='utf-8').readlines()
+    with open(file_path, 'r', encoding='utf-8') as _f:
+            lines = _f.readlines()
     for i, line in enumerate(lines):
         if line.strip().startswith('floor_y_offset'):
             lines[i] = f'floor_y_offset = {int(offset)}\n'

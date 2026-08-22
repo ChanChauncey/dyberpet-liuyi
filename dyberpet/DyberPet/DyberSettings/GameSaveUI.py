@@ -254,7 +254,8 @@ class SaveInterface(ScrollArea):
             return
 
         # check the integrity of files (making sure it can be used)
-        save_dict = json.load(open(os.path.join(folder, 'pet_data.json'), 'r', encoding='UTF-8'))
+        with open(os.path.join(folder, 'pet_data.json'), 'r', encoding='UTF-8') as _f:
+                    save_dict = json.load(_f)
         if petname == self.tr("All pets"):
             petname = 'all'
         CheckStatus = settings.pet_data.check_save_integrity(save_dict, petname)
@@ -267,7 +268,8 @@ class SaveInterface(ScrollArea):
         settings.pet_data.frozen()
 
         # try transfer data to settings.pet_data and save
-        save_dict = json.load(open(os.path.join(folder, 'pet_data.json'), 'r', encoding='UTF-8'))
+        with open(os.path.join(folder, 'pet_data.json'), 'r', encoding='UTF-8') as _f:
+                    save_dict = json.load(_f)
         TransferStatus = settings.pet_data.transfer_save(save_dict, petname)
 
         if TransferStatus:
@@ -322,9 +324,8 @@ class SaveInterface(ScrollArea):
         os.makedirs(finalFolder)
 
         # Record info file
-        infoFile = open(os.path.join(finalFolder, 'info.txt'), 'w', encoding='UTF-8')
-        infoFile.write(f"{settings.petname}\n{self.saveName}")
-        infoFile.close()
+        with open(os.path.join(finalFolder, 'info.txt'), 'w', encoding='UTF-8') as infoFile:
+            infoFile.write(f"{settings.petname}\n{self.saveName}")
 
         # Transfer Save Files
         source_folder = os.path.join(basedir, 'data')
@@ -386,7 +387,8 @@ class SaveInterface(ScrollArea):
             self.__showSystemNote(self.tr('Error: Save folder in bad format!'), 2)
             return
 
-        info = open(os.path.join(jsonPath,'info.txt'),'r', encoding='UTF-8').readlines()
+        with open(os.path.join(jsonPath, 'info.txt'), 'r', encoding='UTF-8') as _f:
+                    info = _f.readlines()
         info = [i.strip() for i in info]
         petname = info[0]
 
@@ -583,7 +585,8 @@ def check_quicksave_folder(folder, subfolder):
 
 
 def check_info_file(file):
-    info = open(file, 'r', encoding='UTF-8').readlines()
+    with open(file, 'r', encoding='UTF-8') as _f:
+            info = _f.readlines()
     info = [i.strip() for i in info if i.strip()]
     if len(info) == 2:
         return True, info[0]
@@ -592,7 +595,8 @@ def check_info_file(file):
 
 def check_data_file(file, petname):
     try:
-        allData_params = json.load(open(file, 'r', encoding='UTF-8'))
+        with open(file, 'r', encoding='UTF-8') as _f:
+                    allData_params = json.load(_f)
         pet_data = allData_params.get(petname, {})
     except:
         return False

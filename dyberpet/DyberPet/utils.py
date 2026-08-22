@@ -125,7 +125,8 @@ def get_MODs(filePath):
 
         info_file = os.path.join(itemFolder, 'info.json')
         if os.path.exists(info_file):
-            info = dict(json.load(open(info_file, 'r', encoding='UTF-8')))
+            with open(info_file, 'r', encoding='UTF-8') as _f:
+                            info = json.load(_f)
             modName = info.get('modName', None)
         else:
             modName = None
